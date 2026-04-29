@@ -27,7 +27,8 @@ async function queryOnChainRole(walletAddress: string): Promise<Role | null> {
     return null;
   }
   try {
-    const provider = createAmoyProvider(rpcUrl);
+    const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
+    const provider = isLocal ? new ethers.JsonRpcProvider(rpcUrl) : createAmoyProvider(rpcUrl);
     const contract = new ethers.Contract(roleManagerAddr, ROLE_MANAGER_ABI, provider);
     const roleHash: string = await contract.getUserRole(walletAddress);
     // bytes32(0) means unregistered

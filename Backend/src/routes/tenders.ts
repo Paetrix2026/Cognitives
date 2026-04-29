@@ -13,6 +13,7 @@ import {
   updateProjectDerivedFields,
 } from "../data";
 import { publishLedgerEvent } from "../socket/server";
+import { txAssignContractor } from "../services/contractService";
 
 const router: IRouter = Router();
 
@@ -64,7 +65,7 @@ router.get("/projects/:id/tender", (req, res) => {
   const tender = tenders.find((t) => t.projectId === project.id && t.status === "OPEN")
     ?? tenders.find((t) => t.projectId === project.id);
   if (!tender) {
-    res.json(null);
+    res.status(404).json({ message: "No tender found for this project" });
     return;
   }
   res.json(tender);
@@ -203,7 +204,9 @@ router.post("/tenders/:id/bids/:bidId/award", async (req, res) => {
     await persistBid(other);
   }
 
-  const txHash = makeTxHash();
+  // Assign contractor on-chain
+  const officialAddress = String(req.body?.officialAddress ?? project.officialAddress ?? "");
+  const txHash = await txAssignContractor(project.id, officialAddress, bid.bidderAddress) ?? makeTxHash();
   const activity = { id: makeId("a"), type: "ContractorAwarded", title: `${bid.bidderAddress.slice(0, 10)}… awarded contract for ${project.title}`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
   activities.unshift(activity);
   updateProjectDerivedFields(project.id);
