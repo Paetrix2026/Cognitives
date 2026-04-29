@@ -426,7 +426,7 @@ components:
           type: string
         status:
           type: string
-          enum: [CREATED, ACTIVE, COMPLETED, PAUSED, CANCELLED]
+          enum: [PENDING_APPROVAL, CREATED, ACTIVE, COMPLETED, PAUSED, CANCELLED]
         milestoneCount:
           type: integer
         txHash:
@@ -438,7 +438,9 @@ components:
           $ref: "#/components/schemas/ProjectCategory"
         reportCount:
           type: integer
-      required: [id, title, description, location, latitude, longitude, totalBudget, spentAmount, startDate, endDate, officialAddress, contractorAddress, status, milestoneCount, txHash, riskLevel, category, reportCount]
+        isPrivate:
+          type: boolean
+      required: [id, title, description, location, latitude, longitude, totalBudget, spentAmount, startDate, endDate, officialAddress, contractorAddress, status, milestoneCount, txHash, riskLevel, category, reportCount, isPrivate]
     ProjectCategory:
       type: string
       enum: [ROAD, DRAINAGE, WATER_SUPPLY, STREET_LIGHTING, PARK, BUILDING, OTHER]
@@ -463,6 +465,8 @@ components:
           type: string
         category:
           $ref: "#/components/schemas/ProjectCategory"
+        isPrivate:
+          type: boolean
       required: [title, description, location, latitude, longitude, totalBudget, endDate, contractorAddress, category]
     ProjectDetail:
       type: object
@@ -535,6 +539,8 @@ components:
         submittedBy:
           type: string
         proofDescription:
+          type: string
+        imageBase64:
           type: string
       required: [latitude, longitude, submittedBy]
     ApproveMilestoneRequest:
