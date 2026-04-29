@@ -45,6 +45,10 @@ const STATE_MESSAGES: Record<LoginState, string> = {
   error: "Connection failed",
 };
 
+const WEB3AUTH_CONFIGURED =
+  !!import.meta.env.VITE_WEB3AUTH_CLIENT_ID &&
+  import.meta.env.VITE_WEB3AUTH_CLIENT_ID !== "YOUR_WEB3AUTH_CLIENT_ID";
+
 export default function Login() {
   const { login, user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -124,35 +128,42 @@ export default function Login() {
         </div>
 
         {/* Web3Auth button */}
-        <button
-          onClick={handleWeb3AuthLogin}
-          disabled={busy || state === "done"}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "12px",
-            padding: "14px 20px",
-            background: state === "done" ? "#12A368" : state === "error" ? "#fff" : "#0C0F1D",
-            color: state === "done" ? "#fff" : state === "error" ? "#0C0F1D" : "#fff",
-            border: state === "error" ? "1.5px solid #e5e7eb" : "none",
-            borderRadius: "12px",
-            fontSize: "14px",
-            fontWeight: 600,
-            cursor: busy || state === "done" ? "default" : "pointer",
-            opacity: busy ? 0.75 : 1,
-            transition: "all 0.2s",
-          }}
-        >
-          {state === "done" ? (
-            <>✓ {STATE_MESSAGES.done}</>
-          ) : busy ? (
-            <><Spinner /> {STATE_MESSAGES[state]}</>
-          ) : (
-            <><ShieldCheck size={18} /> {state === "error" ? "Try again" : STATE_MESSAGES.idle}</>
-          )}
-        </button>
+        {WEB3AUTH_CONFIGURED ? (
+          <button
+            onClick={handleWeb3AuthLogin}
+            disabled={busy || state === "done"}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              padding: "14px 20px",
+              background: state === "done" ? "#12A368" : state === "error" ? "#fff" : "#0C0F1D",
+              color: state === "done" ? "#fff" : state === "error" ? "#0C0F1D" : "#fff",
+              border: state === "error" ? "1.5px solid #e5e7eb" : "none",
+              borderRadius: "12px",
+              fontSize: "14px",
+              fontWeight: 600,
+              cursor: busy || state === "done" ? "default" : "pointer",
+              opacity: busy ? 0.75 : 1,
+              transition: "all 0.2s",
+            }}
+          >
+            {state === "done" ? (
+              <>✓ {STATE_MESSAGES.done}</>
+            ) : busy ? (
+              <><Spinner /> {STATE_MESSAGES[state]}</>
+            ) : (
+              <><ShieldCheck size={18} /> {state === "error" ? "Try again" : STATE_MESSAGES.idle}</>
+            )}
+          </button>
+        ) : (
+          <div style={{ width: "100%", padding: "14px 20px", background: "#f3f4f6", borderRadius: "12px", fontSize: "13px", color: "#6b7280", textAlign: "center", border: "1.5px dashed #d1d5db" }}>
+            <ShieldCheck size={16} style={{ display: "inline", marginRight: "8px", verticalAlign: "middle" }} />
+            Social login unavailable — <code style={{ fontSize: "11px", background: "#e5e7eb", padding: "1px 5px", borderRadius: "4px" }}>VITE_WEB3AUTH_CLIENT_ID</code> not set
+          </div>
+        )}
 
         {/* Error */}
         {state === "error" && error && (

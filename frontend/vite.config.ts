@@ -21,8 +21,9 @@ export default defineConfig({
   base: basePath,
   plugins: [
     nodePolyfills({
-      include: ["buffer", "process", "util", "stream"],
+      include: ["buffer", "process", "util", "stream", "events"],
       globals: { Buffer: true, global: true, process: true },
+      protocolImports: true,
     }),
     react(),
     tailwindcss(),

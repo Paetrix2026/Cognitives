@@ -63,6 +63,9 @@ async function getWeb3Auth(): Promise<Web3Auth> {
     web3authInitPromise = web3auth.init().then(() => {
       web3authInstance = web3auth;
       return web3auth;
+    }).catch((err) => {
+      web3authInitPromise = null; // allow retry after failure
+      throw err;
     });
   }
 

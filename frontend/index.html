@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Must run synchronously before any ES module so Web3Auth/Torus provider
+         finds process.nextTick when its module-level code executes. -->
+    <script>(function(){var p=globalThis.process||(globalThis.process={});if(!p.env)p.env={};if(typeof p.nextTick!=="function")p.nextTick=function(f){var a=Array.prototype.slice.call(arguments,1);Promise.resolve().then(function(){f.apply(null,a)});};if(typeof globalThis.global==="undefined")globalThis.global=globalThis;})();</script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>DecentraliTrack</title>
