@@ -51,6 +51,7 @@ export default function Citizen() {
 
   const filteredProjects = useMemo(() => {
     return projects?.filter((p) => {
+      if (p.isPrivate) return false;
       const matchSearch =
         !searchQuery ||
         p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -99,7 +100,7 @@ export default function Citizen() {
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    projects?.forEach(p => {
+    projects?.filter(p => !p.isPrivate).forEach(p => {
       counts.set(p.category, (counts.get(p.category) ?? 0) + 1);
     });
     return counts;
@@ -220,7 +221,7 @@ export default function Citizen() {
         {/* Category chips */}
         <div className="flex flex-wrap gap-1.5 mb-6">
           <CategoryChip
-            label={`All (${projects?.length ?? 0})`}
+            label={`All (${projects?.filter(p => !p.isPrivate).length ?? 0})`}
             active={activeCategory === "ALL"}
             onClick={() => setActiveCategory("ALL")}
           />
