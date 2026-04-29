@@ -36,6 +36,7 @@ export interface ProjectRecord {
   riskLevel: RiskLevel;
   category: ProjectCategory;
   reportCount: number;
+  isPrivate: boolean;
 }
 
 export interface MilestoneRecord {
@@ -175,6 +176,7 @@ function normalizeProjectRow(row: Record<string, unknown>): ProjectRecord {
     riskLevel: String(row.risk_level) as RiskLevel,
     category: String(row.category) as ProjectCategory,
     reportCount: Number(row.report_count),
+    isPrivate: Boolean(row.is_private),
   };
 }
 
@@ -278,9 +280,11 @@ async function bootstrapTables() {
       tx_hash TEXT NOT NULL,
       risk_level TEXT NOT NULL,
       category TEXT NOT NULL,
-      report_count INTEGER NOT NULL
+      report_count INTEGER NOT NULL,
+      is_private BOOLEAN NOT NULL DEFAULT false
     );
   `);
+  await query(`ALTER TABLE dt_projects ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false`);
   await query(`
     CREATE TABLE IF NOT EXISTS dt_milestones (
       id TEXT PRIMARY KEY,
@@ -446,12 +450,12 @@ export async function persistProject(project: ProjectRecord) {
       INSERT INTO dt_projects (
         id, title, description, location, latitude, longitude, total_budget, spent_amount,
         start_date, end_date, official_address, contractor_address, status, milestone_count,
-        tx_hash, risk_level, category, report_count
+        tx_hash, risk_level, category, report_count, is_private
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14,
-        $15, $16, $17, $18
+        $15, $16, $17, $18, $19
       )
       ON CONFLICT (id)
       DO UPDATE SET
@@ -471,7 +475,8 @@ export async function persistProject(project: ProjectRecord) {
         tx_hash = EXCLUDED.tx_hash,
         risk_level = EXCLUDED.risk_level,
         category = EXCLUDED.category,
-        report_count = EXCLUDED.report_count
+        report_count = EXCLUDED.report_count,
+        is_private = EXCLUDED.is_private
     `,
     [
       project.id,
@@ -492,6 +497,7 @@ export async function persistProject(project: ProjectRecord) {
       project.riskLevel,
       project.category,
       project.reportCount,
+      project.isPrivate,
     ],
   );
 }
