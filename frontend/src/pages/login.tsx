@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
-import { useAuth, hasMetaMask } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import type { UserRole } from "@workspace/api-zod";
-import { ShieldCheck, ChevronDown, ArrowRight, AlertTriangle, ExternalLink } from "lucide-react";
+import { ShieldCheck, ChevronDown, ArrowRight, AlertTriangle } from "lucide-react";
 
 type LoginState = "idle" | "connecting" | "signing" | "done" | "error";
 
@@ -38,9 +38,9 @@ const MetaMaskLogo = () => (
 );
 
 const STATE_MESSAGES: Record<LoginState, string> = {
-  idle: "Connect with MetaMask",
+  idle: "Continue with Web3Auth",
   connecting: "Connecting to wallet…",
-  signing: "Sign the message in MetaMask…",
+  signing: "Sign the verification message…",
   done: "Authenticated!",
   error: "Connection failed",
 };
@@ -51,11 +51,6 @@ export default function Login() {
   const [state, setState] = useState<LoginState>("idle");
   const [error, setError] = useState("");
   const [devOpen, setDevOpen] = useState(false);
-  const [metaMaskAvailable, setMetaMaskAvailable] = useState(false);
-
-  useEffect(() => {
-    setMetaMaskAvailable(hasMetaMask());
-  }, []);
 
   // Already logged in — redirect
   useEffect(() => {
@@ -64,7 +59,7 @@ export default function Login() {
     }
   }, [user, isLoading, setLocation]);
 
-  const handleMetaMaskLogin = async () => {
+  const handleWeb3AuthLogin = async () => {
     setError("");
     setState("connecting");
     try {
@@ -121,59 +116,43 @@ export default function Login() {
             <ShieldCheck size={13} /> Wallet-verified access
           </div>
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#0C0F1D", letterSpacing: "-0.02em", marginBottom: "8px" }}>
-            Connect your wallet
+            Sign in to your workspace
           </h1>
           <p style={{ fontSize: "13px", color: "#6b7280", lineHeight: 1.6 }}>
-            Your role (Citizen, Official, Contractor, Inspector, Auditor) is read from the blockchain once you connect.
+            Continue with Google or MetaMask. Your verified profile and wallet are read automatically.
           </p>
         </div>
 
-        {/* MetaMask button */}
-        {metaMaskAvailable ? (
-          <button
-            onClick={handleMetaMaskLogin}
-            disabled={busy || state === "done"}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "12px",
-              padding: "14px 20px",
-              background: state === "done" ? "#12A368" : state === "error" ? "#fff" : "#0C0F1D",
-              color: state === "done" ? "#fff" : state === "error" ? "#0C0F1D" : "#fff",
-              border: state === "error" ? "1.5px solid #e5e7eb" : "none",
-              borderRadius: "12px",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: busy || state === "done" ? "default" : "pointer",
-              opacity: busy ? 0.75 : 1,
-              transition: "all 0.2s",
-            }}
-          >
-            {state === "done" ? (
-              <>✓ {STATE_MESSAGES.done}</>
-            ) : busy ? (
-              <><Spinner /> {STATE_MESSAGES[state]}</>
-            ) : (
-              <><MetaMaskLogo /> {state === "error" ? "Try again" : STATE_MESSAGES.idle}</>
-            )}
-          </button>
-        ) : (
-          <div style={{ textAlign: "center", padding: "20px", background: "#fafafa", borderRadius: "12px", border: "1px dashed #e5e7eb" }}>
-            <div style={{ fontSize: "28px", marginBottom: "8px" }}>🦊</div>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "#0C0F1D", marginBottom: "4px" }}>MetaMask not detected</div>
-            <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "12px" }}>Install the MetaMask browser extension to use wallet auth.</div>
-            <a
-              href="https://metamask.io/download"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", color: "#1649FF", fontWeight: 600, textDecoration: "none" }}
-            >
-              Install MetaMask <ExternalLink size={12} />
-            </a>
-          </div>
-        )}
+        {/* Web3Auth button */}
+        <button
+          onClick={handleWeb3AuthLogin}
+          disabled={busy || state === "done"}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px",
+            padding: "14px 20px",
+            background: state === "done" ? "#12A368" : state === "error" ? "#fff" : "#0C0F1D",
+            color: state === "done" ? "#fff" : state === "error" ? "#0C0F1D" : "#fff",
+            border: state === "error" ? "1.5px solid #e5e7eb" : "none",
+            borderRadius: "12px",
+            fontSize: "14px",
+            fontWeight: 600,
+            cursor: busy || state === "done" ? "default" : "pointer",
+            opacity: busy ? 0.75 : 1,
+            transition: "all 0.2s",
+          }}
+        >
+          {state === "done" ? (
+            <>✓ {STATE_MESSAGES.done}</>
+          ) : busy ? (
+            <><Spinner /> {STATE_MESSAGES[state]}</>
+          ) : (
+            <><ShieldCheck size={18} /> {state === "error" ? "Try again" : STATE_MESSAGES.idle}</>
+          )}
+        </button>
 
         {/* Error */}
         {state === "error" && error && (
@@ -186,7 +165,7 @@ export default function Login() {
         {/* Signing hint */}
         {state === "signing" && (
           <p style={{ marginTop: "12px", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
-            Check the MetaMask popup — approve the signature request to continue.
+            Approve the wallet signature request to complete verification.
           </p>
         )}
 
@@ -241,7 +220,7 @@ export default function Login() {
       </div>
 
       <p style={{ marginTop: "24px", fontSize: "11.5px", color: "#9ca3af", textAlign: "center" }}>
-        New wallet? You'll be registered as <strong style={{ color: "#6b7280" }}>Citizen</strong> by default.
+        New wallet or social login? You'll be registered as <strong style={{ color: "#6b7280" }}>Citizen</strong> by default.
         <br />Role upgrades are granted by an administrator.
       </p>
     </div>

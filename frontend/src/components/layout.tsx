@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/lib/auth";
+import { formatWalletAddress, useAuth } from "@/lib/auth";
 import { LogOut, Shield } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -17,6 +17,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ].filter(i => i.show);
 
   const roleLabel = user?.role.replace(/_/g, " ").toLowerCase();
+  const displayName = user?.profile?.name || (user ? "Verified wallet" : "");
+  const displayEmail = user?.profile?.email;
 
   return (
     <div className="min-h-screen bg-white text-neutral-900" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
@@ -62,9 +64,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {user ? (
             <div className="flex items-center gap-3 shrink-0">
               <div className="hidden sm:flex flex-col items-end leading-tight">
-                <span className="text-[11px] text-neutral-500 capitalize">{roleLabel}</span>
-                <span className="text-[11px] font-mono text-neutral-900">
-                  {user.walletAddress.substring(0, 6)}…{user.walletAddress.substring(38)}
+                <span className="text-[11px] text-neutral-500 capitalize">{displayEmail || roleLabel}</span>
+                <span className="text-[11px] font-medium text-neutral-900">
+                  {displayName}
+                  <span className="font-mono text-neutral-500 ml-1">{formatWalletAddress(user.walletAddress)}</span>
                 </span>
               </div>
               <button
