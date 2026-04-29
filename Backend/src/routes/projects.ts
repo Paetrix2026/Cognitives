@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import {
   activities,
   getProjectAnomalies,
@@ -24,19 +24,31 @@ import {
   txCloseProject,
 } from "../services/contractService";
 import { logBlockchainAction } from "../services/blockchainLogger";
+import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
 
 const VALID_CATEGORIES: ProjectCategory[] = ["ROAD", "DRAINAGE", "WATER_SUPPLY", "STREET_LIGHTING", "PARK", "BUILDING", "OTHER"];
 const VALID_REPORT_CATEGORIES: ReportCategory[] = ["QUALITY", "MISSING_WORK", "SAFETY", "BUDGET", "OTHER"];
 
-router.get("/projects", (_req, res) => {
+function canReadPrivateProjects(req: Request) {
+  const authHeader = req.headers.authorization ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const caller = token ? verifyToken(token) : null;
+  return Boolean(caller && caller.role !== "CITIZEN");
+}
+
+function visibleProjects(req: Request) {
+  return canReadPrivateProjects(req) ? projects : projects.filter((project) => !project.isPrivate);
+}
+
+router.get("/projects", (req, res) => {
   for (const project of projects) updateProjectDerivedFields(project.id);
-  res.json(projects);
+  res.json(visibleProjects(req));
 });
 
 router.post("/projects", async (req, res) => {
-  const { title, description, location, latitude, longitude, totalBudget, endDate, contractorAddress, category } = req.body ?? {};
+  const { title, description, location, latitude, longitude, totalBudget, endDate, contractorAddress, category, isPrivate } = req.body ?? {};
   if (!title || !description || !location || latitude === undefined || longitude === undefined || !totalBudget || !endDate || !contractorAddress || !category) {
     res.status(400).json({ message: "title, description, location, latitude, longitude, totalBudget, endDate, contractorAddress, and category are required" });
     return;
@@ -91,6 +103,7 @@ router.post("/projects", async (req, res) => {
     riskLevel: "LOW" as const,
     category: category as ProjectCategory,
     reportCount: 0,
+    isPrivate: Boolean(isPrivate),
   };
   projects.unshift(project);
 
@@ -119,15 +132,17 @@ router.post("/projects", async (req, res) => {
   res.status(201).json({ success: true, proof, project });
 });
 
-router.get("/projects/stats", (_req, res) => {
+router.get("/projects/stats", (req, res) => {
   for (const project of projects) updateProjectDerivedFields(project.id);
-  const anomalies = getProjectAnomalies();
+  const readableProjects = visibleProjects(req);
+  const readableProjectIds = new Set(readableProjects.map((project) => project.id));
+  const anomalies = getProjectAnomalies().filter((item) => readableProjectIds.has(item.projectId));
   res.json({
-    totalProjects: projects.length,
-    activeProjects: projects.filter((project) => project.status === "ACTIVE").length,
-    completedProjects: projects.filter((project) => project.status === "COMPLETED").length,
-    totalBudget: projects.reduce((sum, project) => sum + project.totalBudget, 0),
-    totalSpent: projects.reduce((sum, project) => sum + project.spentAmount, 0),
+    totalProjects: readableProjects.length,
+    activeProjects: readableProjects.filter((project) => project.status === "ACTIVE").length,
+    completedProjects: readableProjects.filter((project) => project.status === "COMPLETED").length,
+    totalBudget: readableProjects.reduce((sum, project) => sum + project.totalBudget, 0),
+    totalSpent: readableProjects.reduce((sum, project) => sum + project.spentAmount, 0),
     flaggedProjects: new Set(anomalies.map((item) => item.projectId)).size,
   });
 });
@@ -144,6 +159,7 @@ router.post("/projects/sync", async (_req, res) => {
 router.get("/projects/:id", (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
   if (!project) { res.status(404).json({ message: "Project not found" }); return; }
+  if (project.isPrivate && !canReadPrivateProjects(req)) { res.status(404).json({ message: "Project not found" }); return; }
   updateProjectDerivedFields(project.id);
   res.json({
     project,
@@ -155,6 +171,7 @@ router.get("/projects/:id", (req, res) => {
 router.post("/projects/:id/report", async (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
   if (!project) { res.status(404).json({ message: "Project not found" }); return; }
+  if (project.isPrivate && !canReadPrivateProjects(req)) { res.status(404).json({ message: "Project not found" }); return; }
   const { reporterAddress, reason, category } = req.body ?? {};
   if (!reporterAddress || !reason || !category) {
     res.status(400).json({ message: "reporterAddress, reason, and category are required" });
@@ -202,6 +219,7 @@ router.post("/projects/:id/report", async (req, res) => {
 router.get("/projects/:id/reports", (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
   if (!project) { res.status(404).json({ message: "Project not found" }); return; }
+  if (project.isPrivate && !canReadPrivateProjects(req)) { res.status(404).json({ message: "Project not found" }); return; }
   res.json(reports.filter(r => r.projectId === project.id));
 });
 
