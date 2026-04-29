@@ -10,6 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, ClipboardCheck, FileWarning, MapPin, Search } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
+import { ProjectMap } from "@/components/project-map";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { REPORT_CATEGORIES, categoryLabel, type ReportCategory } from "@/lib/categories";
@@ -83,6 +84,33 @@ export default function Inspector() {
   const milestones = detail?.milestones ?? [];
   const paidMilestones = milestones.filter((milestone) => milestone.status === "PAID").length;
   const pendingProofs = milestones.filter((milestone) => milestone.status === "PROOF_SUBMITTED").length;
+  const mapProjects = filteredProjects.map((project) => ({
+      id: project.id,
+      title: project.title,
+      location: project.location,
+      latitude: project.latitude,
+      longitude: project.longitude,
+      status: project.status,
+      riskLevel: project.riskLevel,
+      totalBudget: project.totalBudget,
+      spentAmount: project.spentAmount,
+      category: project.category,
+      reportCount: project.reportCount,
+    }));
+  const proofLocations = selectedProject
+    ? milestones
+      .filter((milestone) => typeof milestone.proofLatitude === "number" && typeof milestone.proofLongitude === "number")
+      .map((milestone) => ({
+        id: milestone.id,
+        projectId: selectedProject.id,
+        title: milestone.title,
+        latitude: milestone.proofLatitude!,
+        longitude: milestone.proofLongitude!,
+        status: milestone.status,
+        submittedAt: milestone.submittedAt,
+        submittedBy: milestone.submittedBy,
+      }))
+    : [];
 
   const handleReport = () => {
     if (!selectedProject || !reportText.trim()) {
@@ -133,6 +161,28 @@ export default function Inspector() {
         <Stat label="Avg progress" value={`${averageProgress}%`} sub="Budget released" />
         <Stat label="Flagged" value={<span className={flaggedCount > 0 ? "text-red-600" : "text-neutral-900"}>{flaggedCount}</span>} sub="Reports or risk" />
         <Stat label="Total budget" value={`₹${projectList.reduce((sum, project) => sum + project.totalBudget, 0).toLocaleString()}`} sub="Across projects" />
+      </section>
+
+      <section>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-[15px] font-semibold tracking-tight text-neutral-900">Field map</h2>
+            <p className="mt-1 text-[13px] text-neutral-500">
+              Project locations are color coded; selected project proof coordinates appear as dark proof pins.
+            </p>
+          </div>
+          <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+            {mapProjects.length} project{mapProjects.length === 1 ? "" : "s"} · {proofLocations.length} proof{proofLocations.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <ProjectMap
+          projects={mapProjects}
+          proofLocations={proofLocations}
+          selectedProjectId={selectedProject?.id}
+          onProjectSelect={(projectId) => setSelectedProjectId(projectId ?? "")}
+          emptyTitle="No field locations on map"
+          emptyDescription="Projects are still visible in the register when their coordinates need correction."
+        />
       </section>
 
       <section className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-10">

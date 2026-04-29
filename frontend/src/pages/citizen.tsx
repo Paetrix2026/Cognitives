@@ -34,6 +34,7 @@ export default function Citizen() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<ProjectCategory | "ALL">("ALL");
+  const [selectedMapProjectId, setSelectedMapProjectId] = useState<string>();
 
   const handleSync = () => {
     syncProjects.mutate(undefined, {
@@ -63,8 +64,7 @@ export default function Citizen() {
     return (filteredProjects ?? [])
       .filter(p =>
         typeof p.latitude === "number" &&
-        typeof p.longitude === "number" &&
-        (p.status === "ACTIVE" || p.status === "COMPLETED"),
+        typeof p.longitude === "number",
       )
       .map(p => ({
         id: p.id,
@@ -75,6 +75,9 @@ export default function Citizen() {
         status: p.status,
         riskLevel: p.riskLevel,
         totalBudget: p.totalBudget,
+        spentAmount: p.spentAmount,
+        category: p.category,
+        reportCount: p.reportCount,
       }));
   }, [filteredProjects]);
 
@@ -148,14 +151,20 @@ export default function Citizen() {
           <div>
             <h2 className="text-[15px] font-semibold tracking-tight text-neutral-900">Map</h2>
             <p className="mt-1 text-[13px] text-neutral-500">
-              India-only view with each project area pointed on the map and matched to the list below.
+              India-only view with project status shown by color and matched to the list below.
             </p>
           </div>
           <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-neutral-500">
             {mapProjects.length} pin{mapProjects.length === 1 ? "" : "s"}
           </span>
         </div>
-        <ProjectMap projects={mapProjects} />
+        <ProjectMap
+          projects={mapProjects}
+          selectedProjectId={selectedMapProjectId}
+          onProjectSelect={(projectId) => setSelectedMapProjectId(projectId)}
+          emptyTitle="No project locations on map"
+          emptyDescription="Projects remain listed below even if their saved coordinates are missing or invalid."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {projectLocations.map((project) => (
             <Link

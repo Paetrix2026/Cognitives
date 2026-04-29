@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
 import { ethers } from "ethers";
-import { isConfiguredContractAddress, createAmoyProvider } from "../config/contracts";
+import { createConfiguredProvider, getBlockchainRpcUrl, isConfiguredContractAddress } from "../config/contracts";
 import { persistUser, users, type Role } from "../data";
 import { logger } from "../lib/logger";
 
@@ -22,14 +22,13 @@ const ROLE_MANAGER_ABI = [
 ];
 
 async function queryOnChainRole(walletAddress: string): Promise<Role | null> {
-  const rpcUrl = process.env.POLYGON_AMOY_RPC;
+  const rpcUrl = getBlockchainRpcUrl();
   const roleManagerAddr = process.env.ROLE_MANAGER_ADDRESS;
   if (!rpcUrl || !isConfiguredContractAddress(roleManagerAddr)) {
     return null;
   }
   try {
-    const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
-    const provider = isLocal ? new ethers.JsonRpcProvider(rpcUrl) : createAmoyProvider(rpcUrl);
+    const provider = createConfiguredProvider(rpcUrl);
     const contract = new ethers.Contract(roleManagerAddr, ROLE_MANAGER_ABI, provider);
     const roleHash: string = await contract.getUserRole(walletAddress);
     // bytes32(0) means unregistered

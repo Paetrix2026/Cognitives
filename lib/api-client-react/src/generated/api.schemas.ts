@@ -96,6 +96,7 @@ export interface Project {
   riskLevel: ProjectRiskLevel;
   category: ProjectCategory;
   reportCount: number;
+  isPrivate: boolean;
 }
 
 export interface CreateProjectRequest {
@@ -108,6 +109,7 @@ export interface CreateProjectRequest {
   endDate: string;
   contractorAddress: string;
   category: ProjectCategory;
+  isPrivate?: boolean;
 }
 
 export type MilestoneStatus =

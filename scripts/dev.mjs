@@ -6,8 +6,10 @@ import net from "node:net";
 
 // Load root .env into process.env (shell env takes priority — never overrides)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, "..", ".env");
-if (existsSync(envPath)) {
+const shellEnvKeys = new Set(Object.keys(process.env));
+
+function loadEnvFile(envPath, { overrideFileValues = false } = {}) {
+  if (!existsSync(envPath)) return false;
   for (const line of readFileSync(envPath, "utf8").split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -18,9 +20,20 @@ if (existsSync(envPath)) {
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
-    process.env[key] ??= val;
+    if (shellEnvKeys.has(key)) continue;
+    if (overrideFileValues || process.env[key] === undefined) {
+      process.env[key] = val;
+    }
   }
+  return true;
+}
+
+if (loadEnvFile(resolve(__dirname, "..", ".env"))) {
   process.stderr.write("Loaded .env from project root\n");
+}
+
+if (loadEnvFile(resolve(__dirname, "..", ".env.localchain"), { overrideFileValues: true })) {
+  process.stderr.write("Loaded .env.localchain from project root\n");
 }
 
 const children = new Set();

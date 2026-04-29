@@ -7,6 +7,14 @@ export const polygonAmoy = {
   explorerUrl: "https://amoy.polygonscan.com",
 };
 
+export function getBlockchainRpcUrl(): string | undefined {
+  return process.env.HARDHAT_RPC_URL ?? process.env.POLYGON_AMOY_RPC;
+}
+
+export function isLocalRpcUrl(rpcUrl: string): boolean {
+  return rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
+}
+
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 function sanitizeConfiguredAddress(value: string | undefined): string {
@@ -32,4 +40,10 @@ export function isConfiguredContractAddress(value: string | undefined): value is
 export function createAmoyProvider(rpcUrl: string) {
   const network = ethers.Network.from({ chainId: 80002, name: "matic-amoy" });
   return new ethers.JsonRpcProvider(rpcUrl, network, { staticNetwork: true });
+}
+
+export function createConfiguredProvider(rpcUrl: string) {
+  return isLocalRpcUrl(rpcUrl)
+    ? new ethers.JsonRpcProvider(rpcUrl)
+    : createAmoyProvider(rpcUrl);
 }

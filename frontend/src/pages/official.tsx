@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { PROJECT_CATEGORIES, type ProjectCategory } from "@/lib/categories";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -190,6 +191,7 @@ export default function Official() {
     contractorAddress: "",
     category: "ROAD" as ProjectCategory,
     endDate: new Date(Date.now() + 31536000000).toISOString().split("T")[0],
+    isPrivate: false,
   });
 
   const [milestoneForm, setMilestoneForm] = useState({
@@ -331,13 +333,14 @@ export default function Official() {
           contractorAddress: projectForm.contractorAddress || "0x0000000000000000000000000000000000000000",
           endDate: new Date(projectForm.endDate).toISOString(),
           category: projectForm.category,
+          isPrivate: projectForm.isPrivate,
         },
       },
       {
         onSuccess: () => {
           toast({ title: "Project submitted for approval", description: "An auditor must approve before work begins." });
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-          setProjectForm((current) => ({ ...current, title: "", description: "", location: "", totalBudget: "", contractorAddress: "" }));
+          setProjectForm((current) => ({ ...current, title: "", description: "", location: "", totalBudget: "", contractorAddress: "", isPrivate: false }));
         },
         onError: (err) => toast({ title: "Transaction failed", description: String(err), variant: "destructive" }),
       }
@@ -583,6 +586,21 @@ export default function Official() {
           <Field label="Contractor wallet (optional, or assign after approval)">
             <Input className={`${inputCls} font-mono`} value={projectForm.contractorAddress} onChange={(e) => setProjectForm({ ...projectForm, contractorAddress: e.target.value })} placeholder="0x... (leave blank for broadcast/direct assignment)" />
           </Field>
+          <div className="flex items-start justify-between gap-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
+            <div>
+              <div className="flex items-center gap-2 text-[13px] font-medium text-neutral-900">
+                <Lock className="h-3.5 w-3.5 text-neutral-500" /> Private project
+              </div>
+              <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">
+                Hide this project from citizen ledger pages. Officials, auditors, inspectors, contractors, and admins can still access it.
+              </p>
+            </div>
+            <Switch
+              checked={projectForm.isPrivate}
+              onCheckedChange={(checked) => setProjectForm({ ...projectForm, isPrivate: checked })}
+              aria-label="Mark project private"
+            />
+          </div>
           <div className="pt-4">
             <Button type="submit" className="h-10 px-6 text-[13px] font-medium" disabled={createProject.isPending}>
               {createProject.isPending ? "Submitting..." : "Submit for approval"}

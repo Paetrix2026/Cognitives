@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { isConfiguredContractAddress, createAmoyProvider } from "../config/contracts";
+import { createConfiguredProvider, getBlockchainRpcUrl, isConfiguredContractAddress } from "../config/contracts";
 import { logger } from "../lib/logger";
 import {
   activities,
@@ -35,7 +35,7 @@ const PROJECT_REGISTRY_ABI = [
 ];
 
 export function startBlockchainListener() {
-  const rpcUrl = process.env.POLYGON_AMOY_RPC;
+  const rpcUrl = getBlockchainRpcUrl();
   const registryAddr = process.env.PROJECT_REGISTRY_ADDRESS;
   const escrowAddr = process.env.MILESTONE_ESCROW_ADDRESS;
 
@@ -51,10 +51,7 @@ export function startBlockchainListener() {
     return;
   }
 
-  const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
-  const provider = isLocal
-    ? new ethers.JsonRpcProvider(rpcUrl)
-    : createAmoyProvider(rpcUrl);
+  const provider = createConfiguredProvider(rpcUrl);
 
   const registry = new ethers.Contract(registryAddr, PROJECT_REGISTRY_ABI, provider);
   const escrow = new ethers.Contract(escrowAddr, MILESTONE_ESCROW_ABI, provider);
@@ -74,6 +71,7 @@ export function startBlockchainListener() {
       status: "PENDING_APPROVAL" as const,
       milestoneCount: 0, txHash: makeTxHash(),
       riskLevel: "LOW" as const, category: "OTHER" as const, reportCount: 0,
+      isPrivate: false,
     };
     projects.unshift(project);
     const activity = { id: makeId("a"), type: "ProjectCreated", title: `${title} registered on-chain`, projectId: idStr, txHash: project.txHash, timestamp: new Date().toISOString() };

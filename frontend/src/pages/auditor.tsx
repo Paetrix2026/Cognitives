@@ -17,11 +17,12 @@ import {
   getGetAllReportsQueryKey,
 } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/status-badge";
-import { ArrowUpRight, MapPin, FileSearch, Check, X, ClipboardList, AlertTriangle, Flag, LayoutList } from "lucide-react";
+import { ArrowUpRight, MapPin, FileSearch, Check, X, ClipboardList, AlertTriangle, Flag, LayoutList, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { ActionConfirmation } from "@/components/action-confirmation";
 
 type Tab = "milestones" | "projects" | "registry" | "reports";
 
@@ -192,20 +193,41 @@ function PendingQueue({ auditorAddress }: { auditorAddress: string }) {
                   placeholder="State the verification failure…"
                   className="w-full text-[13px] bg-white border border-neutral-300 rounded-md px-3 py-2 outline-none focus:border-neutral-900 resize-none" />
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleReject(m.id)} disabled={rejectMilestone.isPending}
-                    className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-                    <X className="h-3.5 w-3.5" /> Confirm rejection
-                  </button>
+                  <ActionConfirmation
+                    tone="reject"
+                    title="Reject this milestone proof?"
+                    description="The contractor will need to submit fresh proof, and any existing auditor signatures for this milestone will be cleared."
+                    confirmLabel="Reject proof"
+                    pending={rejectMilestone.isPending}
+                    disabled={!rejectReason.trim()}
+                    onConfirm={() => handleReject(m.id)}
+                    details={<span><span className="font-medium">Reason:</span> {rejectReason.trim()}</span>}
+                  >
+                    <button disabled={rejectMilestone.isPending || !rejectReason.trim()}
+                      className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+                      <X className="h-3.5 w-3.5" /> Confirm rejection
+                    </button>
+                  </ActionConfirmation>
                   <button onClick={() => { setRejectingId(null); setRejectReason(""); }}
                     className="text-[12px] h-8 px-3 rounded-md text-neutral-600 hover:text-neutral-900">Cancel</button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button onClick={() => handleApprove(m.id)} disabled={approveMilestone.isPending}
-                  className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 inline-flex items-center gap-1.5">
-                  <Check className="h-3.5 w-3.5" /> {approveMilestone.isPending ? "Signing…" : "Approve"}
-                </button>
+                <ActionConfirmation
+                  tone="approve"
+                  title="Approve this milestone proof?"
+                  description="Your signature will count toward the release threshold for this milestone payment."
+                  confirmLabel="Approve proof"
+                  pending={approveMilestone.isPending}
+                  onConfirm={() => handleApprove(m.id)}
+                  details={<span><span className="font-medium">{m.title}</span> · ₹{m.paymentAmount.toLocaleString()}</span>}
+                >
+                  <button disabled={approveMilestone.isPending}
+                    className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" /> {approveMilestone.isPending ? "Signing…" : "Approve"}
+                  </button>
+                </ActionConfirmation>
                 <button onClick={() => setRejectingId(m.id)}
                   className="text-[12px] h-8 px-3 rounded-md border border-neutral-300 text-neutral-700 hover:border-neutral-900 inline-flex items-center gap-1.5">
                   <X className="h-3.5 w-3.5" /> Reject
@@ -312,20 +334,41 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
               <div className="space-y-2">
                 <Input value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason for rejection…" className="h-9 text-[13px]" />
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleReject(p.id)} disabled={rejectProject.isPending}
-                    className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-                    <X className="h-3.5 w-3.5" /> Confirm rejection
-                  </button>
+                  <ActionConfirmation
+                    tone="reject"
+                    title="Reject this project submission?"
+                    description="The project will leave the approval queue. The official must revise it and submit it again before work can begin."
+                    confirmLabel="Reject project"
+                    pending={rejectProject.isPending}
+                    disabled={!rejectReason.trim()}
+                    onConfirm={() => handleReject(p.id)}
+                    details={<span><span className="font-medium">Reason:</span> {rejectReason.trim()}</span>}
+                  >
+                    <button disabled={rejectProject.isPending || !rejectReason.trim()}
+                      className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+                      <X className="h-3.5 w-3.5" /> Confirm rejection
+                    </button>
+                  </ActionConfirmation>
                   <button onClick={() => { setRejectingId(null); setRejectReason(""); }}
                     className="text-[12px] h-8 px-3 rounded-md text-neutral-600">Cancel</button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button onClick={() => handleApprove(p.id, p.title)} disabled={approveProject.isPending}
-                  className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 inline-flex items-center gap-1.5">
-                  <Check className="h-3.5 w-3.5" /> Approve project
-                </button>
+                <ActionConfirmation
+                  tone="approve"
+                  title="Approve this project?"
+                  description="The project will become active, allowing the official to assign a contractor and continue execution."
+                  confirmLabel="Approve project"
+                  pending={approveProject.isPending}
+                  onConfirm={() => handleApprove(p.id, p.title)}
+                  details={<span><span className="font-medium">{p.title}</span> · ₹{p.totalBudget.toLocaleString()}</span>}
+                >
+                  <button disabled={approveProject.isPending}
+                    className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" /> Approve project
+                  </button>
+                </ActionConfirmation>
                 <button onClick={() => setRejectingId(p.id)}
                   className="text-[12px] h-8 px-3 rounded-md border border-neutral-300 text-neutral-700 hover:border-neutral-900 inline-flex items-center gap-1.5">
                   <X className="h-3.5 w-3.5" /> Reject
@@ -341,6 +384,7 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
 
 // ── Project registry (filterable table) ───────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING_APPROVAL" | "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED";
+type VisibilityFilter = "ALL" | "PRIVATE";
 
 const FILTER_OPTIONS: { value: StatusFilter; label: string; color: string }[] = [
   { value: "ALL",              label: "All",           color: "bg-neutral-100 text-neutral-700 hover:bg-neutral-200" },
@@ -354,13 +398,15 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string; color: string }[] = 
 function ProjectRegistry() {
   const { data: allProjects, isLoading } = useListProjects({ query: { queryKey: getListProjectsQueryKey(), refetchInterval: 15000 } });
   const [filter, setFilter] = useState<StatusFilter>("ALL");
+  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("ALL");
   const [search, setSearch] = useState("");
 
   const filtered = (allProjects ?? []).filter(p => {
     const matchesStatus = filter === "ALL" || p.status === filter;
+    const matchesVisibility = visibilityFilter === "ALL" || p.isPrivate;
     const q = search.toLowerCase();
     const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.location.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesVisibility && matchesSearch;
   });
 
   const counts: Record<StatusFilter, number> = {
@@ -371,6 +417,7 @@ function ProjectRegistry() {
     COMPLETED:        allProjects?.filter(p => p.status === "COMPLETED").length ?? 0,
     CANCELLED:        allProjects?.filter(p => p.status === "CANCELLED").length ?? 0,
   };
+  const privateCount = allProjects?.filter(p => p.isPrivate).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -392,6 +439,20 @@ function ProjectRegistry() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setVisibilityFilter((current) => current === "PRIVATE" ? "ALL" : "PRIVATE")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
+            visibilityFilter === "PRIVATE"
+              ? "ring-2 ring-offset-1 ring-neutral-900 bg-neutral-900 text-white"
+              : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+          }`}
+        >
+          <Lock className="h-3.5 w-3.5" />
+          Private
+          <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+            {privateCount}
+          </span>
+        </button>
       </div>
 
       {/* Search */}
@@ -433,7 +494,14 @@ function ProjectRegistry() {
                 <tr key={p.id} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50/60 transition-colors">
                   <td className="px-4 py-3.5 text-neutral-400 tabular-nums">{i + 1}</td>
                   <td className="px-4 py-3.5">
-                    <div className="font-medium text-neutral-900 leading-snug">{p.title}</div>
+                    <div className="flex items-center gap-2 font-medium text-neutral-900 leading-snug">
+                      <span>{p.title}</span>
+                      {p.isPrivate && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600">
+                          <Lock className="h-3 w-3" /> Private
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-neutral-400 mt-0.5 font-mono">
                       {p.officialAddress.slice(0, 10)}…
                     </div>

@@ -13,8 +13,10 @@ dist-ssr
 *.local
 *.tsbuildinfo
 .env
+.env.localchain
 contracts/artifacts
 contracts/cache
+contracts/deployments
 
 # Editor directories and files
 .vscode/*

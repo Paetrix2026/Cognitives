@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Response } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import {
   activities,
   makeId,
@@ -21,8 +21,16 @@ import {
   txReleaseFunds,
 } from "../services/contractService";
 import { logBlockchainAction } from "../services/blockchainLogger";
+import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
+
+function canReadPrivateProjects(req: Request) {
+  const authHeader = req.headers.authorization ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const caller = token ? verifyToken(token) : null;
+  return Boolean(caller && caller.role !== "CITIZEN");
+}
 
 async function handleUploadProof(milestoneId: string, body: Record<string, unknown>, res: Response) {
   const milestone = milestones.find((item) => item.id === milestoneId);
@@ -95,6 +103,11 @@ router.get("/milestones/pending", (_req, res) => {
 });
 
 router.get("/milestones/:projectId", (req, res) => {
+  const project = projects.find((item) => item.id === req.params.projectId);
+  if (project?.isPrivate && !canReadPrivateProjects(req)) {
+    res.status(404).json({ message: "Project not found" });
+    return;
+  }
   res.json(milestones.filter((item) => item.projectId === req.params.projectId).map(serializeMilestone));
 });
 

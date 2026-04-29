@@ -17,4 +17,5 @@ export interface CreateProjectRequest {
   endDate: string;
   contractorAddress: string;
   category: ProjectCategory;
+  isPrivate?: boolean;
 }

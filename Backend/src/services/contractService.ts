@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { isConfiguredContractAddress } from "../config/contracts";
+import { createConfiguredProvider, getBlockchainRpcUrl, isConfiguredContractAddress } from "../config/contracts";
 import { logger } from "../lib/logger";
 import type { ProjectCategory } from "../data";
 
@@ -53,7 +53,7 @@ const signers = new Map<string, ethers.Wallet>(); // lowercase address → walle
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initContractService() {
-  const rpcUrl = process.env.POLYGON_AMOY_RPC;
+  const rpcUrl = getBlockchainRpcUrl();
   const registryAddr = process.env.PROJECT_REGISTRY_ADDRESS;
   const escrowAddr = process.env.MILESTONE_ESCROW_ADDRESS;
 
@@ -62,21 +62,14 @@ export function initContractService() {
     return;
   }
 
-  // Use a plain provider for local Hardhat (chainId auto-detected), staticNetwork for Amoy
-  const isLocal = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost");
-  provider = isLocal
-    ? new ethers.JsonRpcProvider(rpcUrl)
-    : new ethers.JsonRpcProvider(
-      rpcUrl,
-      ethers.Network.from({ chainId: 80002, name: "matic-amoy" }),
-      { staticNetwork: true },
-    );
+  provider = createConfiguredProvider(rpcUrl);
 
   const rawKeys = [
     process.env.PRIVKEY_GOVT_OFFICIAL,
     process.env.PRIVKEY_AUDITOR,
     process.env.PRIVKEY_CONTRACTOR_1,
     process.env.PRIVKEY_CONTRACTOR_2,
+    process.env.PRIVKEY_INSPECTOR,
   ].filter(Boolean) as string[];
 
   for (const key of rawKeys) {

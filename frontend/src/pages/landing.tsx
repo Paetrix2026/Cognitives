@@ -6,7 +6,6 @@ import {
   HardHat,
   FileCheck,
   LayoutDashboard,
-  ArrowRight,
   CheckCircle2,
   ShieldCheck,
   Layers,
@@ -20,13 +19,10 @@ import {
   Github,
   Linkedin,
   Mail,
-  ExternalLink,
   Building2,
   HelpCircle,
   Search,
 } from "lucide-react";
-import { CyberButton } from "@/components/ui/cyber-button";
-
 
 export default function Landing() {
   const { isLoading } = useAuth();
@@ -1093,7 +1089,9 @@ export default function Landing() {
             </p>
 
             <div className="cl-hero-actions">
-              <CyberButton text="CONNECT WALLET" onClick={() => setLocation("/login")} />
+              <button className="cl-btn-prim" onClick={() => setLocation("/login")}>
+                Connect Wallet <ArrowUpRight size={16} />
+              </button>
               <button className="cl-btn-sec" onClick={() => setLocation("/citizen")}>
                 Explore Projects
               </button>

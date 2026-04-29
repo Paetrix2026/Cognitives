@@ -31,11 +31,11 @@ async function main() {
   const INSPECTOR = await roleManager.INSPECTOR();
 
   const checks = await Promise.all([
-    roleManager.hasRole(official.address, GOVT_OFFICIAL),
-    roleManager.hasRole(auditor.address, AUDITOR),
-    roleManager.hasRole(contractor1.address, CONTRACTOR),
-    roleManager.hasRole(contractor2.address, CONTRACTOR),
-    roleManager.hasRole(inspectorAddress, INSPECTOR),
+    roleManager.hasRole(GOVT_OFFICIAL, official.address),
+    roleManager.hasRole(AUDITOR, auditor.address),
+    roleManager.hasRole(CONTRACTOR, contractor1.address),
+    roleManager.hasRole(CONTRACTOR, contractor2.address),
+    roleManager.hasRole(INSPECTOR, inspectorAddress),
     projectRegistry.roleManager(),
     milestoneEscrow.projectRegistry(),
     milestoneEscrow.roleManager(),

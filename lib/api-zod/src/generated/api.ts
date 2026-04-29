@@ -78,6 +78,7 @@ export const ListProjectsResponseItem = zod.object({
     "OTHER",
   ]),
   reportCount: zod.number(),
+  isPrivate: zod.boolean(),
 });
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 
@@ -102,6 +103,7 @@ export const CreateProjectBody = zod.object({
     "BUILDING",
     "OTHER",
   ]),
+  isPrivate: zod.boolean().optional(),
 });
 
 /**
@@ -160,6 +162,7 @@ export const GetProjectResponse = zod.object({
       "OTHER",
     ]),
     reportCount: zod.number(),
+    isPrivate: zod.boolean(),
   }),
   milestones: zod.array(
     zod.object({

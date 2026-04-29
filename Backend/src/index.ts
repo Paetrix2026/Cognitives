@@ -30,7 +30,7 @@ console.log("");
 console.log(`🕐 [${new Date().toISOString()}] Server initialization started`);
 console.log(`🌍 Environment : ${process.env.NODE_ENV ?? "development"}`);
 console.log(`🔌 Port        : ${port}`);
-console.log(`🔗 Blockchain  : ${process.env.POLYGON_AMOY_RPC ? "Polygon Amoy (live)" : "Demo sync mode (no RPC configured)"}`);
+console.log(`🔗 Blockchain  : ${process.env.HARDHAT_RPC_URL ? "Local Hardhat" : process.env.POLYGON_AMOY_RPC ? "Polygon Amoy (live)" : "Demo sync mode (no RPC configured)"}`);
 console.log(`🗄️  Database    : ${process.env.DATABASE_URL ? "PostgreSQL (configured)" : "In-memory demo store"}`);
 console.log(`📦 IPFS        : ${process.env.PINATA_JWT ? "Pinata (configured)" : "Demo CIDs (no Pinata JWT)"}`);
 console.log("");

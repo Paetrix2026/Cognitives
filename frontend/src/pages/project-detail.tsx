@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { categoryLabel, REPORT_CATEGORIES, type ReportCategory } from "@/lib/categories";
+import { ActionConfirmation } from "@/components/action-confirmation";
 
 export default function ProjectDetail({ id }: { id?: string }) {
   const params = useParams();
@@ -347,13 +348,23 @@ export default function ProjectDetail({ id }: { id?: string }) {
                           className="w-full text-[13px] bg-white border border-neutral-300 rounded-md px-3 py-2 outline-none focus:border-neutral-900 resize-none"
                         />
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleReject(m.id)}
-                            disabled={rejectMilestone.isPending}
-                            className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                          <ActionConfirmation
+                            tone="reject"
+                            title="Reject this milestone proof?"
+                            description="The contractor will need to resubmit proof before this milestone can be approved again."
+                            confirmLabel="Reject proof"
+                            pending={rejectMilestone.isPending}
+                            disabled={!rejectReason.trim()}
+                            onConfirm={() => handleReject(m.id)}
+                            details={<span><span className="font-medium">Reason:</span> {rejectReason.trim()}</span>}
                           >
-                            <X className="h-3.5 w-3.5" /> Confirm rejection
-                          </button>
+                            <button
+                              disabled={rejectMilestone.isPending || !rejectReason.trim()}
+                              className="text-[12px] h-8 px-3 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                            >
+                              <X className="h-3.5 w-3.5" /> Confirm rejection
+                            </button>
+                          </ActionConfirmation>
                           <button
                             onClick={() => { setRejectingId(null); setRejectReason(""); }}
                             className="text-[12px] h-8 px-3 rounded-md text-neutral-600 hover:text-neutral-900 transition-colors"
@@ -364,15 +375,25 @@ export default function ProjectDetail({ id }: { id?: string }) {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleApprove(m.id)}
-                          disabled={approveMilestone.isPending || project.status === "PAUSED"}
-                          title={project.status === "PAUSED" ? "Resolve citizen concerns before approving" : undefined}
-                          className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                        <ActionConfirmation
+                          tone="approve"
+                          title="Authorize this milestone release?"
+                          description="Your approval will be recorded as an auditor signature toward the payment release threshold."
+                          confirmLabel="Authorize release"
+                          pending={approveMilestone.isPending}
+                          disabled={project.status === "PAUSED"}
+                          onConfirm={() => handleApprove(m.id)}
+                          details={<span><span className="font-medium">{m.title}</span> · ₹{m.paymentAmount.toLocaleString()}</span>}
                         >
-                          <Check className="h-3.5 w-3.5" />
-                          {approveMilestone.isPending ? "Signing…" : "Authorize release"}
-                        </button>
+                          <button
+                            disabled={approveMilestone.isPending || project.status === "PAUSED"}
+                            title={project.status === "PAUSED" ? "Resolve citizen concerns before approving" : undefined}
+                            className="text-[12px] h-8 px-3 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            {approveMilestone.isPending ? "Signing…" : "Authorize release"}
+                          </button>
+                        </ActionConfirmation>
                         <button
                           onClick={() => setRejectingId(m.id)}
                           className="text-[12px] h-8 px-3 rounded-md border border-neutral-300 text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 transition-colors inline-flex items-center gap-1.5"
