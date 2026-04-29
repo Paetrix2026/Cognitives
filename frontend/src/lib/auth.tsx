@@ -29,7 +29,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID || "YOUR_WEB3AUTH_CLIENT_ID";
+const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID ?? "";
+const WEB3AUTH_CONFIGURED = WEB3AUTH_CLIENT_ID.length > 0 && WEB3AUTH_CLIENT_ID !== "YOUR_WEB3AUTH_CLIENT_ID";
 
 const chainConfig = {
   chainNamespace: CHAIN_NAMESPACES.EIP155,
@@ -46,6 +47,7 @@ let web3authInstance: Web3Auth | null = null;
 let web3authInitPromise: Promise<Web3Auth> | null = null;
 
 async function getWeb3Auth(): Promise<Web3Auth> {
+  if (!WEB3AUTH_CONFIGURED) throw new Error("Web3Auth is not configured. Set VITE_WEB3AUTH_CLIENT_ID to enable social login.");
   if (web3authInstance) return web3authInstance;
   if (!web3authInitPromise) {
     const web3auth = new Web3Auth({
@@ -155,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!WEB3AUTH_CONFIGURED) return;
     void getWeb3Auth().catch((err) => {
       console.error("Web3Auth initialization failed", err);
     });
@@ -177,7 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    void getWeb3Auth().then((web3auth) => web3auth.logout({ cleanup: true })).catch(() => undefined);
+    if (WEB3AUTH_CONFIGURED) {
+      void getWeb3Auth().then((web3auth) => web3auth.logout({ cleanup: true })).catch(() => undefined);
+    }
     setUser(null);
     setToken(null);
     localStorage.removeItem("dt_token");
