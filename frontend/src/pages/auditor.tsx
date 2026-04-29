@@ -244,7 +244,7 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
       { id: projectId, data: { auditorAddress } },
       {
         onSuccess: () => {
-          toast({ title: "Project approved", description: `${title} is now ACTIVE — official can publish tender.` });
+          toast({ title: "Project approved", description: `${title} is now ACTIVE — official can assign a contractor.` });
           queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
         },
         onError: (err) => toast({ title: "Failed", description: String(err), variant: "destructive" }),
@@ -306,7 +306,7 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
             <div className="flex items-center gap-2 text-[11.5px] text-neutral-500 mb-4">
               <span>Deadline: {new Date(p.endDate).toLocaleDateString()}</span>
               <span>·</span>
-              <span>Contractor: {p.contractorAddress === "0x0000000000000000000000000000000000000000" ? "TBD via tender" : p.contractorAddress.slice(0, 10) + "…"}</span>
+              <span>Contractor: {p.contractorAddress === "0x0000000000000000000000000000000000000000" ? "Pending assignment" : p.contractorAddress.slice(0, 10) + "…"}</span>
             </div>
             {isThisRejecting ? (
               <div className="space-y-2">

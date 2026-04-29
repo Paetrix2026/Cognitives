@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type Role = "CITIZEN" | "GOVT_OFFICIAL" | "CONTRACTOR" | "AUDITOR";
+type Role = "CITIZEN" | "GOVT_OFFICIAL" | "CONTRACTOR" | "AUDITOR" | "INSPECTOR";
 
 const ROLES: { value: Role; label: string; color: string }[] = [
   { value: "CITIZEN", label: "Citizen", color: "#6b7280" },
   { value: "GOVT_OFFICIAL", label: "Government Official", color: "#1649FF" },
   { value: "CONTRACTOR", label: "Contractor", color: "#cf9207" },
+  { value: "INSPECTOR", label: "Field Inspector", color: "#7c3aed" },
   { value: "AUDITOR", label: "Auditor", color: "#12A368" },
 ];
 
@@ -147,8 +148,9 @@ export default function Admin() {
               <span className="font-medium text-neutral-700" style={{ minWidth: "130px" }}>{r.label}</span>
               <span className="text-neutral-500">
                 {r.value === "CITIZEN" && "Default for all new wallets — public read access"}
-                {r.value === "GOVT_OFFICIAL" && "Creates projects, publishes tenders, manages escrow"}
-                {r.value === "CONTRACTOR" && "Submits proofs, bids on tenders, claims payments"}
+                {r.value === "GOVT_OFFICIAL" && "Creates projects, assigns contractors, manages escrow"}
+                {r.value === "CONTRACTOR" && "Claims broadcasts, submits proofs, receives payments"}
+                {r.value === "INSPECTOR" && "Reads project data and reports field observations to officials and auditors"}
                 {r.value === "AUDITOR" && "Reviews proofs, approves milestone releases (2-of-3 multi-sig)"}
               </span>
             </div>

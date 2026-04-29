@@ -29,6 +29,7 @@ export const UserRole = {
   GOVT_OFFICIAL: "GOVT_OFFICIAL",
   CONTRACTOR: "CONTRACTOR",
   AUDITOR: "AUDITOR",
+  INSPECTOR: "INSPECTOR",
   CITIZEN: "CITIZEN",
 } as const;
 

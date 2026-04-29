@@ -387,7 +387,7 @@ components:
           type: string
         role:
           type: string
-          enum: [ADMIN, GOVT_OFFICIAL, CONTRACTOR, AUDITOR, CITIZEN]
+          enum: [ADMIN, GOVT_OFFICIAL, CONTRACTOR, AUDITOR, INSPECTOR, CITIZEN]
       required: [walletAddress, role]
     AuthVerifyResponse:
       type: object

@@ -23,16 +23,19 @@ async function main() {
   const milestoneEscrow = await hre.ethers.getContractAt("MilestoneEscrow", milestoneEscrowAddress, provider);
 
   const [official, auditor, contractor1, contractor2] = await hre.ethers.getSigners();
+  const inspectorAddress = "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199";
 
   const GOVT_OFFICIAL = await roleManager.GOVT_OFFICIAL();
   const AUDITOR = await roleManager.AUDITOR();
   const CONTRACTOR = await roleManager.CONTRACTOR();
+  const INSPECTOR = await roleManager.INSPECTOR();
 
   const checks = await Promise.all([
     roleManager.hasRole(official.address, GOVT_OFFICIAL),
     roleManager.hasRole(auditor.address, AUDITOR),
     roleManager.hasRole(contractor1.address, CONTRACTOR),
     roleManager.hasRole(contractor2.address, CONTRACTOR),
+    roleManager.hasRole(inspectorAddress, INSPECTOR),
     projectRegistry.roleManager(),
     milestoneEscrow.projectRegistry(),
     milestoneEscrow.roleManager(),
@@ -43,6 +46,7 @@ async function main() {
     auditorOk,
     contractor1Ok,
     contractor2Ok,
+    inspectorOk,
     registryRoleManager,
     escrowProjectRegistry,
     escrowRoleManager,
@@ -71,6 +75,7 @@ async function main() {
     [auditor.address]: auditorOk ? "AUDITOR OK" : "MISSING",
     [contractor1.address]: contractor1Ok ? "CONTRACTOR OK" : "MISSING",
     [contractor2.address]: contractor2Ok ? "CONTRACTOR OK" : "MISSING",
+    [inspectorAddress]: inspectorOk ? "INSPECTOR OK" : "MISSING",
   });
 
   const wiringOk =
@@ -78,7 +83,7 @@ async function main() {
     escrowProjectRegistry.toLowerCase() === projectRegistryAddress.toLowerCase() &&
     escrowRoleManager.toLowerCase() === roleManagerAddress.toLowerCase();
 
-  const rolesOk = officialOk && auditorOk && contractor1Ok && contractor2Ok;
+  const rolesOk = officialOk && auditorOk && contractor1Ok && contractor2Ok && inspectorOk;
 
   if (!wiringOk || !rolesOk) {
     process.exitCode = 1;

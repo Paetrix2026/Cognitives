@@ -42,6 +42,7 @@ export const VerifyWalletSignatureResponse = zod.object({
       "GOVT_OFFICIAL",
       "CONTRACTOR",
       "AUDITOR",
+      "INSPECTOR",
       "CITIZEN",
     ]),
   }),

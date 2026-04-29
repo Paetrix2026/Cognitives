@@ -13,6 +13,7 @@ const ROLE_HASHES: Record<string, Role> = {
   [ethers.id("GOVT_OFFICIAL")]: "GOVT_OFFICIAL",
   [ethers.id("CONTRACTOR")]: "CONTRACTOR",
   [ethers.id("AUDITOR")]: "AUDITOR",
+  [ethers.id("INSPECTOR")]: "INSPECTOR",
   [ethers.id("CITIZEN")]: "CITIZEN",
 };
 
@@ -41,7 +42,7 @@ async function queryOnChainRole(walletAddress: string): Promise<Role | null> {
 }
 
 function inferRoleFallback(walletAddress: string): Role {
-  const roles: Role[] = ["CITIZEN", "GOVT_OFFICIAL", "CONTRACTOR", "AUDITOR"];
+  const roles: Role[] = ["CITIZEN", "GOVT_OFFICIAL", "CONTRACTOR", "AUDITOR", "INSPECTOR"];
   const index = Number.parseInt(walletAddress.toLowerCase().slice(-2), 16);
   return roles[Number.isFinite(index) ? index % roles.length : 0] ?? "CITIZEN";
 }
@@ -135,7 +136,7 @@ router.post("/auth/admin/grant-role", async (req, res) => {
   }
 
   const { targetWallet, role } = req.body ?? {};
-  const validRoles: Role[] = ["CITIZEN", "GOVT_OFFICIAL", "CONTRACTOR", "AUDITOR"];
+  const validRoles: Role[] = ["CITIZEN", "GOVT_OFFICIAL", "CONTRACTOR", "AUDITOR", "INSPECTOR"];
   if (!targetWallet || !role || !validRoles.includes(role)) {
     res.status(400).json({ message: `targetWallet and role (${validRoles.join(", ")}) are required` });
     return;
