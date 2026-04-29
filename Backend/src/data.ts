@@ -122,15 +122,10 @@ const seedMilestones: MilestoneRecord[] = [];
 const seedActivities: ActivityEventRecord[] = [];
 const seedReports: ProjectReportRecord[] = [];
 
-// Predefined demo accounts — keyed to standard Hardhat test wallets
 const seedUsers: UserRecord[] = [
-  { walletAddress: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", role: "GOVT_OFFICIAL" },
-  { walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", role: "AUDITOR" },
-  { walletAddress: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", role: "CONTRACTOR" },
-  { walletAddress: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", role: "CONTRACTOR" },
-  { walletAddress: "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199", role: "INSPECTOR" },
-  { walletAddress: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65", role: "CITIZEN" },
-  { walletAddress: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc", role: "CITIZEN" },
+  { walletAddress: "0x437a62ee161a037cc7DEc3D70785C01f7Dc0758b", role: "GOVT_OFFICIAL" },
+  { walletAddress: "0xF32a19dBDc4B0378F2dc1265133f60419546CfB5", role: "AUDITOR" },
+  { walletAddress: "0xAe8511b9733D783CD623a792dc4867053EE60A6a", role: "CONTRACTOR" },
 ];
 
 export const users = new Map<string, UserRecord>(
