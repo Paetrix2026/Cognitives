@@ -317,7 +317,14 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
             <div className="flex items-start justify-between gap-4 mb-2">
               <div className="min-w-0">
                 <div className="text-[11px] uppercase tracking-[0.1em] text-neutral-500 mb-1">{p.category.replace("_", " ")} · {p.location}</div>
-                <h3 className="text-[15px] font-medium text-neutral-900">{p.title}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[15px] font-medium text-neutral-900">{p.title}</h3>
+                  {p.isPrivate && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 border border-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600">
+                      <Lock className="h-3 w-3" /> Private
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-right shrink-0">
                 <div className="text-[14px] font-semibold tabular-nums text-neutral-900">₹{p.totalBudget.toLocaleString()}</div>
