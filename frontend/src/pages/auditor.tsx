@@ -408,21 +408,24 @@ function ProjectRegistry() {
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("ALL");
   const [search, setSearch] = useState("");
 
-  const filtered = (allProjects ?? []).filter(p => {
+  const visibilityFiltered = (allProjects ?? []).filter(p =>
+    visibilityFilter === "ALL" || p.isPrivate
+  );
+
+  const filtered = visibilityFiltered.filter(p => {
     const matchesStatus = filter === "ALL" || p.status === filter;
-    const matchesVisibility = visibilityFilter === "ALL" || p.isPrivate;
     const q = search.toLowerCase();
     const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.location.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
-    return matchesStatus && matchesVisibility && matchesSearch;
+    return matchesStatus && matchesSearch;
   });
 
   const counts: Record<StatusFilter, number> = {
-    ALL:              allProjects?.length ?? 0,
-    PENDING_APPROVAL: allProjects?.filter(p => p.status === "PENDING_APPROVAL").length ?? 0,
-    ACTIVE:           allProjects?.filter(p => p.status === "ACTIVE").length ?? 0,
-    PAUSED:           allProjects?.filter(p => p.status === "PAUSED").length ?? 0,
-    COMPLETED:        allProjects?.filter(p => p.status === "COMPLETED").length ?? 0,
-    CANCELLED:        allProjects?.filter(p => p.status === "CANCELLED").length ?? 0,
+    ALL:              visibilityFiltered.length,
+    PENDING_APPROVAL: visibilityFiltered.filter(p => p.status === "PENDING_APPROVAL").length,
+    ACTIVE:           visibilityFiltered.filter(p => p.status === "ACTIVE").length,
+    PAUSED:           visibilityFiltered.filter(p => p.status === "PAUSED").length,
+    COMPLETED:        visibilityFiltered.filter(p => p.status === "COMPLETED").length,
+    CANCELLED:        visibilityFiltered.filter(p => p.status === "CANCELLED").length,
   };
   const privateCount = allProjects?.filter(p => p.isPrivate).length ?? 0;
 
@@ -542,7 +545,7 @@ function ProjectRegistry() {
             </tbody>
           </table>
           <div className="px-4 py-2.5 border-t border-neutral-100 bg-neutral-50 text-[11.5px] text-neutral-500">
-            Showing {filtered.length} of {allProjects?.length ?? 0} projects
+            Showing {filtered.length} of {visibilityFiltered.length} projects
           </div>
         </div>
       )}
