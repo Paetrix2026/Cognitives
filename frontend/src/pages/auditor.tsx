@@ -17,7 +17,7 @@ import {
   getGetAllReportsQueryKey,
 } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/status-badge";
-import { ArrowUpRight, MapPin, FileSearch, Check, X, ClipboardList, AlertTriangle, Flag, LayoutList } from "lucide-react";
+import { ArrowUpRight, MapPin, FileSearch, Check, X, ClipboardList, AlertTriangle, Flag, LayoutList, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -384,6 +384,7 @@ function ProjectApprovals({ auditorAddress }: { auditorAddress: string }) {
 
 // ── Project registry (filterable table) ───────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING_APPROVAL" | "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED";
+type VisibilityFilter = "ALL" | "PRIVATE";
 
 const FILTER_OPTIONS: { value: StatusFilter; label: string; color: string }[] = [
   { value: "ALL",              label: "All",           color: "bg-neutral-100 text-neutral-700 hover:bg-neutral-200" },
@@ -397,13 +398,15 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string; color: string }[] = 
 function ProjectRegistry() {
   const { data: allProjects, isLoading } = useListProjects({ query: { queryKey: getListProjectsQueryKey(), refetchInterval: 15000 } });
   const [filter, setFilter] = useState<StatusFilter>("ALL");
+  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("ALL");
   const [search, setSearch] = useState("");
 
   const filtered = (allProjects ?? []).filter(p => {
     const matchesStatus = filter === "ALL" || p.status === filter;
+    const matchesVisibility = visibilityFilter === "ALL" || p.isPrivate;
     const q = search.toLowerCase();
     const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.location.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesVisibility && matchesSearch;
   });
 
   const counts: Record<StatusFilter, number> = {
@@ -414,6 +417,7 @@ function ProjectRegistry() {
     COMPLETED:        allProjects?.filter(p => p.status === "COMPLETED").length ?? 0,
     CANCELLED:        allProjects?.filter(p => p.status === "CANCELLED").length ?? 0,
   };
+  const privateCount = allProjects?.filter(p => p.isPrivate).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -435,6 +439,20 @@ function ProjectRegistry() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setVisibilityFilter((current) => current === "PRIVATE" ? "ALL" : "PRIVATE")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors ${
+            visibilityFilter === "PRIVATE"
+              ? "ring-2 ring-offset-1 ring-neutral-900 bg-neutral-900 text-white"
+              : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+          }`}
+        >
+          <Lock className="h-3.5 w-3.5" />
+          Private
+          <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+            {privateCount}
+          </span>
+        </button>
       </div>
 
       {/* Search */}
@@ -476,7 +494,14 @@ function ProjectRegistry() {
                 <tr key={p.id} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50/60 transition-colors">
                   <td className="px-4 py-3.5 text-neutral-400 tabular-nums">{i + 1}</td>
                   <td className="px-4 py-3.5">
-                    <div className="font-medium text-neutral-900 leading-snug">{p.title}</div>
+                    <div className="flex items-center gap-2 font-medium text-neutral-900 leading-snug">
+                      <span>{p.title}</span>
+                      {p.isPrivate && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600">
+                          <Lock className="h-3 w-3" /> Private
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-neutral-400 mt-0.5 font-mono">
                       {p.officialAddress.slice(0, 10)}…
                     </div>
