@@ -28,4 +28,5 @@ export interface Project {
   riskLevel: ProjectRiskLevel;
   category: ProjectCategory;
   reportCount: number;
+  isPrivate: boolean;
 }
