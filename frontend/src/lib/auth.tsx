@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { BrowserProvider } from "ethers";
-import { createAuthNonce, verifyWalletSignature } from "@workspace/api-client-react";
+import { createAuthNonce, setAuthTokenGetter, verifyWalletSignature } from "@workspace/api-client-react";
 import type { User, UserRole } from "@workspace/api-zod";
+
+setAuthTokenGetter(() => (typeof localStorage === "undefined" ? null : localStorage.getItem("dt_token")));
 
 interface AuthContextType {
   user: User | null;
