@@ -71,6 +71,7 @@ export function startBlockchainListener() {
       status: "PENDING_APPROVAL" as const,
       milestoneCount: 0, txHash: makeTxHash(),
       riskLevel: "LOW" as const, category: "OTHER" as const, reportCount: 0,
+      isPrivate: false,
     };
     projects.unshift(project);
     const activity = { id: makeId("a"), type: "ProjectCreated", title: `${title} registered on-chain`, projectId: idStr, txHash: project.txHash, timestamp: new Date().toISOString() };
