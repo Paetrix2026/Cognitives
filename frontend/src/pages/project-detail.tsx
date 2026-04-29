@@ -158,6 +158,11 @@ export default function ProjectDetail({ id }: { id?: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status={project.status} />
               {project.riskLevel !== "LOW" && <StatusBadge status={project.riskLevel} type="risk" />}
+              {project.isPrivate && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                  <Lock className="h-3 w-3" /> Private
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-neutral-500">
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {project.location}</span>
