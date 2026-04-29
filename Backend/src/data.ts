@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { logger } from "./lib/logger";
 
-export type Role = "ADMIN" | "GOVT_OFFICIAL" | "CONTRACTOR" | "AUDITOR" | "CITIZEN";
+export type Role = "ADMIN" | "GOVT_OFFICIAL" | "CONTRACTOR" | "AUDITOR" | "INSPECTOR" | "CITIZEN";
 export type ProjectStatus = "PENDING_APPROVAL" | "CREATED" | "ACTIVE" | "COMPLETED" | "PAUSED" | "CANCELLED";
 export type MilestoneStatus = "PENDING" | "PROOF_SUBMITTED" | "APPROVED" | "REJECTED" | "PAID";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -127,6 +127,7 @@ const seedUsers: UserRecord[] = [
   { walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", role: "AUDITOR" },
   { walletAddress: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", role: "CONTRACTOR" },
   { walletAddress: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", role: "CONTRACTOR" },
+  { walletAddress: "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199", role: "INSPECTOR" },
   { walletAddress: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65", role: "CITIZEN" },
   { walletAddress: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc", role: "CITIZEN" },
 ];
@@ -495,11 +496,6 @@ export async function persistProject(project: ProjectRecord) {
   );
 }
 
-export async function deleteMilestone(milestoneId: string) {
-  if (!pool) return;
-  await query(`DELETE FROM dt_milestones WHERE id = $1`, [milestoneId]);
-}
-
 export async function persistMilestone(milestone: MilestoneRecord) {
   if (!pool) return;
 
@@ -513,7 +509,7 @@ export async function persistMilestone(milestone: MilestoneRecord) {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12,
-        $13, $14, $15, $16, $17::jsonb, $18, $19
+        $13, $14, $15, $16::jsonb, $17, $18
       )
       ON CONFLICT (id)
       DO UPDATE SET

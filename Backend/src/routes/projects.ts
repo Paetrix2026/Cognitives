@@ -14,8 +14,16 @@ import {
   type ProjectCategory,
   type ReportCategory,
 } from "../data";
-
 import { publishLedgerEvent } from "../socket/server";
+import {
+  txCreateProject,
+  txApproveProject,
+  txRejectProject,
+  txPauseProject,
+  txResumeProject,
+  txCloseProject,
+} from "../services/contractService";
+import { logBlockchainAction } from "../services/blockchainLogger";
 
 const router: IRouter = Router();
 
@@ -38,8 +46,34 @@ router.post("/projects", async (req, res) => {
     return;
   }
 
+  const officialAddress = String(req.body?.officialAddress ?? "0xDemoOfficial000000000000000000000000000000001");
+
+  // Submit on-chain — get real txHash and projectId if blockchain is enabled
+  const onChain = await txCreateProject({
+    officialAddress,
+    title: String(title),
+    description: String(description),
+    location: String(location),
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+    totalBudget: Number(totalBudget),
+    endDate: String(endDate),
+    contractorAddress: String(contractorAddress),
+    category: category as ProjectCategory,
+  });
+
+  const projectId = onChain?.projectId || makeId();
+  const txHash = onChain?.txHash || makeTxHash();
+
+  // Skip if blockchain listener already created this project from the event
+  if (onChain?.projectId && projects.find((p) => p.id === onChain.projectId)) {
+    const existing = projects.find((p) => p.id === onChain.projectId)!;
+    res.status(201).json(existing);
+    return;
+  }
+
   const project = {
-    id: makeId(),
+    id: projectId,
     title: String(title),
     description: String(description),
     location: String(location),
@@ -49,23 +83,40 @@ router.post("/projects", async (req, res) => {
     spentAmount: 0,
     startDate: new Date().toISOString(),
     endDate: String(endDate),
-    officialAddress: String(req.body?.officialAddress ?? "0xDemoOfficial000000000000000000000000000000001"),
+    officialAddress,
     contractorAddress: String(contractorAddress),
     status: "PENDING_APPROVAL" as const,
     milestoneCount: 0,
-    txHash: makeTxHash(),
+    txHash,
     riskLevel: "LOW" as const,
     category: category as ProjectCategory,
     reportCount: 0,
   };
   projects.unshift(project);
-  const activity = { id: makeId("a"), type: "ProjectCreated", title: `${project.title} created with escrow budget`, projectId: project.id, txHash: project.txHash, timestamp: new Date().toISOString() };
+
+  const now = new Date().toISOString();
+  const activity = { id: makeId("a"), type: "ProjectCreated", title: `${project.title} created with escrow budget`, projectId: project.id, txHash, timestamp: now };
   activities.unshift(activity);
   await persistProject(project);
   await persistActivity(activity);
   publishLedgerEvent({ type: "project.updated", projectId: project.id });
   publishLedgerEvent({ type: "activity.created", projectId: project.id, activityId: activity.id });
-  res.status(201).json(project);
+
+  const proof = onChain
+    ? {
+      txHash: onChain.txHash,
+      blockNumber: onChain.blockNumber,
+      gasUsed: onChain.gasUsed,
+      role: "GOV_OFFICIAL",
+      action: "PROJECT_CREATED",
+      from: officialAddress,
+      timestamp: now,
+    }
+    : null;
+
+  if (proof) logBlockchainAction(proof);
+
+  res.status(201).json({ success: true, proof, project });
 });
 
 router.get("/projects/stats", (_req, res) => {
@@ -92,10 +143,7 @@ router.post("/projects/sync", async (_req, res) => {
 
 router.get("/projects/:id", (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
-  if (!project) {
-    res.status(404).json({ message: "Project not found" });
-    return;
-  }
+  if (!project) { res.status(404).json({ message: "Project not found" }); return; }
   updateProjectDerivedFields(project.id);
   res.json({
     project,
@@ -106,10 +154,7 @@ router.get("/projects/:id", (req, res) => {
 
 router.post("/projects/:id/report", async (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
-  if (!project) {
-    res.status(404).json({ message: "Project not found" });
-    return;
-  }
+  if (!project) { res.status(404).json({ message: "Project not found" }); return; }
   const { reporterAddress, reason, category } = req.body ?? {};
   if (!reporterAddress || !reason || !category) {
     res.status(400).json({ message: "reporterAddress, reason, and category are required" });
@@ -131,38 +176,32 @@ router.post("/projects/:id/report", async (req, res) => {
   };
   reports.unshift(report);
 
-  // Pause project pending audit (per PPT promise)
+  // Pause project on-chain (auditor address used as the signer — auditor reviews concerns)
+  const auditorAddress = String(req.body?.auditorAddress ?? process.env.PRIVKEY_AUDITOR ?? "");
+  const txHash = await txPauseProject(project.id, auditorAddress) ?? makeTxHash();
+
   if (project.status === "ACTIVE" || project.status === "CREATED") {
     project.status = "PAUSED";
   }
   updateProjectDerivedFields(project.id);
 
-  const txHash = makeTxHash();
   const activity = {
-    id: makeId("a"),
-    type: "ConcernReported",
+    id: makeId("a"), type: "ConcernReported",
     title: `Citizen concern filed against ${project.title} — payments paused`,
-    projectId: project.id,
-    txHash,
-    timestamp: report.createdAt,
+    projectId: project.id, txHash, timestamp: report.createdAt,
   };
   activities.unshift(activity);
-
   await persistReport(report);
   await persistProject(project);
   await persistActivity(activity);
   publishLedgerEvent({ type: "report.created", projectId: project.id, activityId: activity.id });
   publishLedgerEvent({ type: "project.updated", projectId: project.id });
-
   res.json(report);
 });
 
 router.get("/projects/:id/reports", (req, res) => {
   const project = projects.find((item) => item.id === req.params.id);
-  if (!project) {
-    res.status(404).json({ message: "Project not found" });
-    return;
-  }
+  if (!project) { res.status(404).json({ message: "Project not found" }); return; }
   res.json(reports.filter(r => r.projectId === project.id));
 });
 
@@ -171,14 +210,15 @@ router.post("/projects/:id/approve", async (req, res) => {
   const project = projects.find((p) => p.id === req.params.id);
   if (!project) { res.status(404).json({ message: "Project not found" }); return; }
   if (project.status !== "PENDING_APPROVAL") {
-    res.status(409).json({ message: `Project is ${project.status}, not pending approval` });
-    return;
+    res.status(409).json({ message: `Project is ${project.status}, not pending approval` }); return;
   }
   const { auditorAddress } = req.body ?? {};
   if (!auditorAddress) { res.status(400).json({ message: "auditorAddress is required" }); return; }
 
+  const txHash = await txApproveProject(project.id, String(auditorAddress)) ?? makeTxHash();
+
   project.status = "ACTIVE";
-  const activity = { id: makeId("a"), type: "ProjectApproved", title: `${project.title} approved by auditor`, projectId: project.id, txHash: makeTxHash(), timestamp: new Date().toISOString() };
+  const activity = { id: makeId("a"), type: "ProjectApproved", title: `${project.title} approved by auditor`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
   activities.unshift(activity);
   await persistProject(project);
   await persistActivity(activity);
@@ -192,14 +232,15 @@ router.post("/projects/:id/reject", async (req, res) => {
   const project = projects.find((p) => p.id === req.params.id);
   if (!project) { res.status(404).json({ message: "Project not found" }); return; }
   if (project.status !== "PENDING_APPROVAL") {
-    res.status(409).json({ message: `Project is ${project.status}, not pending approval` });
-    return;
+    res.status(409).json({ message: `Project is ${project.status}, not pending approval` }); return;
   }
   const { auditorAddress, reason } = req.body ?? {};
   if (!auditorAddress || !reason) { res.status(400).json({ message: "auditorAddress and reason are required" }); return; }
 
+  const txHash = await txRejectProject(project.id, String(auditorAddress), String(reason)) ?? makeTxHash();
+
   project.status = "CANCELLED";
-  const activity = { id: makeId("a"), type: "ProjectRejected", title: `${project.title} rejected — ${String(reason).slice(0, 80)}`, projectId: project.id, txHash: makeTxHash(), timestamp: new Date().toISOString() };
+  const activity = { id: makeId("a"), type: "ProjectRejected", title: `${project.title} rejected — ${String(reason).slice(0, 80)}`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
   activities.unshift(activity);
   await persistProject(project);
   await persistActivity(activity);
@@ -217,19 +258,18 @@ router.post("/projects/:id/reports/:reportId/resolve", async (req, res) => {
 
   const { action, auditorAddress } = req.body ?? {};
   if (!action || !["DISMISS", "ACKNOWLEDGE"].includes(action)) {
-    res.status(400).json({ message: "action must be DISMISS or ACKNOWLEDGE" });
-    return;
+    res.status(400).json({ message: "action must be DISMISS or ACKNOWLEDGE" }); return;
   }
   if (!auditorAddress) { res.status(400).json({ message: "auditorAddress is required" }); return; }
 
   report.status = action === "DISMISS" ? "DISMISSED" : "ACKNOWLEDGED";
 
-  // If dismissing: check if any other pending reports remain; if none, resume project
   if (action === "DISMISS" && project.status === "PAUSED") {
     const remaining = reports.filter(r => r.projectId === project.id && r.status === "PENDING_REVIEW");
     if (remaining.length === 0) {
+      const txHash = await txResumeProject(project.id, String(auditorAddress)) ?? makeTxHash();
       project.status = "ACTIVE";
-      const resumeActivity = { id: makeId("a"), type: "ProjectResumed", title: `${project.title} resumed — citizen concern dismissed`, projectId: project.id, txHash: makeTxHash(), timestamp: new Date().toISOString() };
+      const resumeActivity = { id: makeId("a"), type: "ProjectResumed", title: `${project.title} resumed — citizen concern dismissed`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
       activities.unshift(resumeActivity);
       await persistActivity(resumeActivity);
     }
@@ -254,8 +294,11 @@ router.post("/projects/:id/close", async (req, res) => {
     return;
   }
 
+  const officialAddress = String(req.body?.officialAddress ?? "");
+  const txHash = await txCloseProject(project.id, officialAddress) ?? makeTxHash();
+
   project.status = "COMPLETED";
-  const activity = { id: makeId("a"), type: "ProjectClosed", title: `${project.title} officially closed`, projectId: project.id, txHash: makeTxHash(), timestamp: new Date().toISOString() };
+  const activity = { id: makeId("a"), type: "ProjectClosed", title: `${project.title} officially closed`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
   activities.unshift(activity);
   await persistProject(project);
   await persistActivity(activity);
@@ -264,7 +307,7 @@ router.post("/projects/:id/close", async (req, res) => {
   res.json(project);
 });
 
-// ── List all reports (auditor view, across projects) ──────────────────────────
+// ── List all reports (auditor view) ──────────────────────────────────────────
 router.get("/reports", (req, res) => {
   const { status } = req.query;
   const filtered = status ? reports.filter(r => r.status === status) : reports;

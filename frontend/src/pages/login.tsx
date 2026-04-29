@@ -10,16 +10,18 @@ const ROLE_REDIRECT: Record<string, string> = {
   GOVT_OFFICIAL: "/official",
   CONTRACTOR: "/contractor",
   AUDITOR: "/auditor",
+  INSPECTOR: "/inspector",
   ADMIN: "/official",
   CITIZEN: "/citizen",
 };
 
 // Fixed Hardhat test wallets — match the backend seedUsers in data.ts
 const DEMO_ACCOUNTS: { role: UserRole; wallet: string; label: string; desc: string }[] = [
-  { role: "GOVT_OFFICIAL", wallet: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", label: "Government Official", desc: "Create projects, publish tenders and manage escrow" },
+  { role: "GOVT_OFFICIAL", wallet: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", label: "Government Official", desc: "Create projects, assign contractors and manage escrow" },
   { role: "AUDITOR",       wallet: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", label: "Auditor",             desc: "Review milestone proofs and authorize fund release" },
-  { role: "CONTRACTOR",    wallet: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", label: "Contractor 1",        desc: "Bid on tenders and submit milestone proofs" },
-  { role: "CONTRACTOR",    wallet: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", label: "Contractor 2",        desc: "Bid on tenders and submit milestone proofs" },
+  { role: "CONTRACTOR",    wallet: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", label: "Contractor 1",        desc: "Claim broadcasts and submit milestone proofs" },
+  { role: "CONTRACTOR",    wallet: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", label: "Contractor 2",        desc: "Claim broadcasts and submit milestone proofs" },
+  { role: "INSPECTOR",     wallet: "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199", label: "Field Inspector",     desc: "Read project details and report ground-level observations" },
   { role: "CITIZEN",       wallet: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65", label: "Citizen 1",           desc: "Browse public ledger and report concerns" },
   { role: "CITIZEN",       wallet: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc", label: "Citizen 2",           desc: "Browse public ledger and report concerns" },
 ];
@@ -127,7 +129,7 @@ export default function Login() {
             Connect your wallet
           </h1>
           <p style={{ fontSize: "13px", color: "#6b7280", lineHeight: 1.6 }}>
-            Your role (Citizen, Official, Contractor, Auditor) is read from the blockchain once you connect.
+            Your role (Citizen, Official, Contractor, Inspector, Auditor) is read from the blockchain once you connect.
           </p>
         </div>
 

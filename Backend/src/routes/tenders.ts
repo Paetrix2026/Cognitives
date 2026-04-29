@@ -1,35 +1,120 @@
 import { Router, type IRouter } from "express";
 import {
   activities,
-  bids,
   makeId,
   makeTxHash,
   persistActivity,
-  persistBid,
   persistProject,
   persistTender,
   projects,
   tenders,
   updateProjectDerivedFields,
+  users,
 } from "../data";
 import { publishLedgerEvent } from "../socket/server";
+import { txAssignContractor } from "../services/contractService";
 
 const router: IRouter = Router();
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// ── Publish a tender for a project ────────────────────────────────────────────
+function isUnassigned(contractorAddress: string) {
+  return !contractorAddress || contractorAddress.toLowerCase() === ZERO_ADDRESS;
+}
+
+function isAssignableProjectStatus(status: string) {
+  return !["COMPLETED", "CANCELLED"].includes(status);
+}
+
+function activeAssignmentCount(walletAddress: string) {
+  const wallet = walletAddress.toLowerCase();
+  return projects.filter((project) =>
+    project.contractorAddress.toLowerCase() === wallet &&
+    ["ACTIVE", "PAUSED", "PENDING_APPROVAL", "CREATED"].includes(project.status),
+  ).length;
+}
+
+async function assignContractorToProject(params: {
+  projectId: string;
+  contractorAddress: string;
+  officialAddress: string;
+  activityType: string;
+  title: string;
+}) {
+  const project = projects.find((p) => p.id === params.projectId);
+  if (!project) return { status: 404 as const, body: { message: "Project not found" } };
+  if (!isAssignableProjectStatus(project.status)) {
+    return { status: 409 as const, body: { message: `Project is ${project.status} and cannot be assigned` } };
+  }
+  if (!params.contractorAddress || !params.contractorAddress.startsWith("0x") || params.contractorAddress.length !== 42) {
+    return { status: 400 as const, body: { message: "A valid contractorAddress is required" } };
+  }
+  const contractor = users.get(params.contractorAddress.toLowerCase());
+  if (!contractor || contractor.role !== "CONTRACTOR") {
+    return { status: 400 as const, body: { message: "Selected wallet is not a registered contractor" } };
+  }
+  if (activeAssignmentCount(params.contractorAddress) > 0) {
+    return { status: 409 as const, body: { message: "Selected contractor is not currently available" } };
+  }
+
+  const txHash = await txAssignContractor(project.id, params.officialAddress, params.contractorAddress) ?? makeTxHash();
+  project.contractorAddress = params.contractorAddress;
+  if (project.status === "CREATED" || project.status === "PENDING_APPROVAL") {
+    project.status = "ACTIVE";
+  }
+  updateProjectDerivedFields(project.id);
+
+  const activity = {
+    id: makeId("a"),
+    type: params.activityType,
+    title: params.title,
+    projectId: project.id,
+    txHash,
+    timestamp: new Date().toISOString(),
+  };
+  activities.unshift(activity);
+  await persistProject(project);
+  await persistActivity(activity);
+  publishLedgerEvent({ type: "project.updated", projectId: project.id });
+  publishLedgerEvent({ type: "activity.created", projectId: project.id, activityId: activity.id });
+  return { status: 200 as const, body: { project, activity } };
+}
+
+router.get("/contractors", (_req, res) => {
+  const contractors = [...users.values()]
+    .filter((user) => user.role === "CONTRACTOR")
+    .map((user) => ({
+      walletAddress: user.walletAddress,
+      activeAssignments: activeAssignmentCount(user.walletAddress),
+      available: activeAssignmentCount(user.walletAddress) === 0,
+    }))
+    .sort((a, b) => Number(a.available) === Number(b.available)
+      ? a.walletAddress.localeCompare(b.walletAddress)
+      : Number(b.available) - Number(a.available));
+  res.json(contractors);
+});
+
 router.post("/projects/:id/tender", async (req, res) => {
   const project = projects.find((p) => p.id === req.params.id);
   if (!project) {
     res.status(404).json({ message: "Project not found" });
     return;
   }
-  if (tenders.find((t) => t.projectId === project.id && t.status === "OPEN")) {
-    res.status(409).json({ message: "An open tender already exists for this project" });
+  if (!isAssignableProjectStatus(project.status)) {
+    res.status(409).json({ message: `Project is ${project.status} and cannot be broadcast` });
     return;
   }
-  const { description, minimumBid, deadline, publishedBy } = req.body ?? {};
-  if (!description || !minimumBid || !deadline || !publishedBy) {
-    res.status(400).json({ message: "description, minimumBid, deadline, and publishedBy are required" });
+  if (!isUnassigned(project.contractorAddress)) {
+    res.status(409).json({ message: "Project already has an assigned contractor" });
+    return;
+  }
+  if (tenders.find((t) => t.projectId === project.id && t.status === "OPEN")) {
+    res.status(409).json({ message: "An open broadcast already exists for this project" });
+    return;
+  }
+
+  const { description, deadline, publishedBy } = req.body ?? {};
+  if (!description || !deadline || !publishedBy) {
+    res.status(400).json({ message: "description, deadline, and publishedBy are required" });
     return;
   }
 
@@ -37,7 +122,7 @@ router.post("/projects/:id/tender", async (req, res) => {
     id: makeId("t"),
     projectId: project.id,
     description: String(description).slice(0, 800),
-    minimumBid: Number(minimumBid),
+    minimumBid: project.totalBudget,
     deadline: String(deadline),
     status: "OPEN" as const,
     publishedBy: String(publishedBy),
@@ -45,7 +130,14 @@ router.post("/projects/:id/tender", async (req, res) => {
   };
   tenders.unshift(tender);
 
-  const activity = { id: makeId("a"), type: "TenderPublished", title: `Tender published for ${project.title}`, projectId: project.id, txHash: makeTxHash(), timestamp: tender.createdAt };
+  const activity = {
+    id: makeId("a"),
+    type: "ProjectBroadcast",
+    title: `${project.title} broadcast for first-come contractor assignment`,
+    projectId: project.id,
+    txHash: makeTxHash(),
+    timestamp: tender.createdAt,
+  };
   activities.unshift(activity);
   await persistTender(tender);
   await persistActivity(activity);
@@ -54,7 +146,6 @@ router.post("/projects/:id/tender", async (req, res) => {
   res.status(201).json(tender);
 });
 
-// ── Get current tender for a project ─────────────────────────────────────────
 router.get("/projects/:id/tender", (req, res) => {
   const project = projects.find((p) => p.id === req.params.id);
   if (!project) {
@@ -64,158 +155,84 @@ router.get("/projects/:id/tender", (req, res) => {
   const tender = tenders.find((t) => t.projectId === project.id && t.status === "OPEN")
     ?? tenders.find((t) => t.projectId === project.id);
   if (!tender) {
-    res.json(null);
+    res.status(404).json({ message: "No broadcast found for this project" });
     return;
   }
   res.json(tender);
 });
 
-// ── List all open tenders (for contractor browsing) ───────────────────────────
 router.get("/tenders", (_req, res) => {
   const open = tenders
     .filter((t) => t.status === "OPEN" && new Date(t.deadline) > new Date())
     .map((t) => {
       const project = projects.find((p) => p.id === t.projectId);
-      return { ...t, projectTitle: project?.title ?? "", projectLocation: project?.location ?? "", projectCategory: project?.category ?? "OTHER" };
+      return {
+        ...t,
+        projectTitle: project?.title ?? "",
+        projectLocation: project?.location ?? "",
+        projectCategory: project?.category ?? "OTHER",
+      };
     });
   res.json(open);
 });
 
-// ── Submit a bid ──────────────────────────────────────────────────────────────
-router.post("/tenders/:id/bids", async (req, res) => {
+router.post("/tenders/:id/claim", async (req, res) => {
   const tender = tenders.find((t) => t.id === req.params.id);
   if (!tender) {
-    res.status(404).json({ message: "Tender not found" });
+    res.status(404).json({ message: "Broadcast not found" });
     return;
   }
   if (tender.status !== "OPEN") {
-    res.status(409).json({ message: "Tender is no longer open" });
+    res.status(409).json({ message: "Broadcast has already been claimed or cancelled" });
     return;
   }
   if (new Date(tender.deadline) < new Date()) {
-    res.status(409).json({ message: "Tender deadline has passed" });
-    return;
-  }
-  const { bidderAddress, proposedAmount, notes } = req.body ?? {};
-  if (!bidderAddress || !proposedAmount) {
-    res.status(400).json({ message: "bidderAddress and proposedAmount are required" });
-    return;
-  }
-  if (Number(proposedAmount) < tender.minimumBid) {
-    res.status(400).json({ message: `Bid must be at least ₹${tender.minimumBid.toLocaleString()}` });
+    res.status(409).json({ message: "Broadcast deadline has passed" });
     return;
   }
 
-  // One bid per bidder per tender
-  const existing = bids.find((b) => b.tenderId === tender.id && b.bidderAddress.toLowerCase() === String(bidderAddress).toLowerCase() && b.status === "PENDING");
-  if (existing) {
-    res.status(409).json({ message: "You already have a pending bid on this tender" });
-    return;
-  }
-
-  const bid = {
-    id: makeId("b"),
-    tenderId: tender.id,
-    projectId: tender.projectId,
-    bidderAddress: String(bidderAddress),
-    proposedAmount: Number(proposedAmount),
-    notes: String(notes ?? "").slice(0, 600),
-    status: "AWARDED" as const,
-    createdAt: new Date().toISOString(),
-  };
   const project = projects.find((p) => p.id === tender.projectId);
   if (!project) {
     res.status(404).json({ message: "Project not found" });
     return;
   }
-
-  tender.status = "AWARDED";
-  project.contractorAddress = bid.bidderAddress;
-  if (project.status === "CREATED" || project.status === "ACTIVE") {
-    project.status = "ACTIVE";
+  if (!isUnassigned(project.contractorAddress)) {
+    tender.status = "AWARDED";
+    await persistTender(tender);
+    res.status(409).json({ message: "Project was already assigned to another contractor" });
+    return;
   }
-  bids.unshift(bid);
-  updateProjectDerivedFields(project.id);
 
-  const txHash = makeTxHash();
-  const activity = {
-    id: makeId("a"),
-    type: "ContractorAwarded",
-    title: `${bid.bidderAddress.slice(0, 10)}... agreed to ${project.title}`,
+  const contractorAddress = String(req.body?.contractorAddress ?? "");
+  const result = await assignContractorToProject({
     projectId: project.id,
-    txHash,
-    timestamp: new Date().toISOString(),
-  };
-  activities.unshift(activity);
-
-  await persistBid(bid);
-  await persistTender(tender);
-  await persistProject(project);
-  await persistActivity(activity);
-  publishLedgerEvent({ type: "project.updated", projectId: project.id });
-  publishLedgerEvent({ type: "activity.created", projectId: project.id, activityId: activity.id });
-
-  res.status(201).json(bid);
-});
-
-// ── List bids for a tender ────────────────────────────────────────────────────
-router.get("/tenders/:id/bids", (req, res) => {
-  const tender = tenders.find((t) => t.id === req.params.id);
-  if (!tender) {
-    res.status(404).json({ message: "Tender not found" });
-    return;
-  }
-  res.json(bids.filter((b) => b.tenderId === tender.id));
-});
-
-// ── Award a bid (official selects contractor) ─────────────────────────────────
-router.post("/tenders/:id/bids/:bidId/award", async (req, res) => {
-  const tender = tenders.find((t) => t.id === req.params.id);
-  if (!tender) {
-    res.status(404).json({ message: "Tender not found" });
-    return;
-  }
-  if (tender.status !== "OPEN") {
-    res.status(409).json({ message: "Tender already awarded or cancelled" });
-    return;
-  }
-  const bid = bids.find((b) => b.id === req.params.bidId && b.tenderId === tender.id);
-  if (!bid) {
-    res.status(404).json({ message: "Bid not found" });
+    contractorAddress,
+    officialAddress: project.officialAddress,
+    activityType: "BroadcastClaimed",
+    title: `${contractorAddress.slice(0, 10)}... claimed ${project.title} from broadcast`,
+  });
+  if (result.status !== 200) {
+    res.status(result.status).json(result.body);
     return;
   }
 
-  const project = projects.find((p) => p.id === tender.projectId);
-  if (!project) {
-    res.status(404).json({ message: "Project not found" });
-    return;
-  }
-
-  // Award: update bid + tender status, assign contractor on project
-  bid.status = "AWARDED";
   tender.status = "AWARDED";
-  project.contractorAddress = bid.bidderAddress;
-  if (project.status === "CREATED") project.status = "ACTIVE";
-
-  // Reject all other pending bids
-  for (const other of bids.filter((b) => b.tenderId === tender.id && b.id !== bid.id && b.status === "PENDING")) {
-    other.status = "REJECTED";
-    await persistBid(other);
-  }
-
-  const txHash = makeTxHash();
-  const activity = { id: makeId("a"), type: "ContractorAwarded", title: `${bid.bidderAddress.slice(0, 10)}… awarded contract for ${project.title}`, projectId: project.id, txHash, timestamp: new Date().toISOString() };
-  activities.unshift(activity);
-  updateProjectDerivedFields(project.id);
-
-  await persistBid(bid);
   await persistTender(tender);
-  await persistProject(project);
-  await persistActivity(activity);
-  publishLedgerEvent({ type: "project.updated", projectId: project.id });
-  publishLedgerEvent({ type: "activity.created", projectId: project.id, activityId: activity.id });
+  res.json({ tender, ...result.body });
+});
 
-  res.json({ tender, bid, project });
+router.post("/projects/:id/assign-contractor", async (req, res) => {
+  const project = projects.find((p) => p.id === req.params.id);
+  const contractorAddress = String(req.body?.contractorAddress ?? "");
+  const officialAddress = String(req.body?.officialAddress ?? project?.officialAddress ?? "");
+  const result = await assignContractorToProject({
+    projectId: req.params.id,
+    contractorAddress,
+    officialAddress,
+    activityType: "DirectContractorAssigned",
+    title: `${contractorAddress.slice(0, 10)}... directly assigned to ${project?.title ?? "project"} by official order`,
+  });
+  res.status(result.status).json(result.body);
 });
 
 export default router;

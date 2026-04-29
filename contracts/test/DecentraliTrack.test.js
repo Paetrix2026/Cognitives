@@ -20,12 +20,14 @@ describe("DecentraliTrack", function () {
 
   it("creates a project, receives proof, and releases funds after two approvals", async function () {
     const { projectRegistry, milestoneEscrow, official, contractor, auditor1, auditor2 } = await deployAll();
-    await projectRegistry.connect(official).createProject("Road", "Ward road", "Pune", 18520400, 73856700, ethers.parseEther("2"), 1, 9999999999, contractor.address);
+    const futureEndDate = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+    await projectRegistry.connect(official).createProject("Road", "Ward road", "Pune", 18520400, 73856700, ethers.parseEther("2"), futureEndDate, contractor.address, 1);
     await milestoneEscrow.connect(official).fundProject(1, { value: ethers.parseEther("1") });
     await milestoneEscrow.connect(official).createMilestone(1, "Base", "Base course", ethers.parseEther("1"));
     await milestoneEscrow.connect(contractor).submitProof(1, "bafyproof", 18520400, 73856700);
     await milestoneEscrow.connect(auditor1).approveMilestone(1);
-    await expect(milestoneEscrow.connect(auditor2).approveMilestone(1)).to.changeEtherBalance(contractor, ethers.parseEther("1"));
+    await milestoneEscrow.connect(auditor2).approveMilestone(1);
+    await expect(milestoneEscrow.connect(official).releaseFunds(1)).to.changeEtherBalance(contractor, ethers.parseEther("1"));
     const milestone = await milestoneEscrow.getMilestone(1);
     expect(milestone.status).to.equal(4);
   });

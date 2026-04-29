@@ -8,6 +8,7 @@ contract RoleManager is AccessControl {
     bytes32 public constant GOVT_OFFICIAL = keccak256("GOVT_OFFICIAL");
     bytes32 public constant CONTRACTOR = keccak256("CONTRACTOR");
     bytes32 public constant AUDITOR = keccak256("AUDITOR");
+    bytes32 public constant INSPECTOR = keccak256("INSPECTOR");
     bytes32 public constant CITIZEN = keccak256("CITIZEN");
 
     mapping(address => bytes32) private primaryRoles;

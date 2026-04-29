@@ -14,6 +14,7 @@ import Citizen from "./pages/citizen";
 import Official from "./pages/official";
 import Contractor from "./pages/contractor";
 import Auditor from "./pages/auditor";
+import Inspector from "./pages/inspector";
 import ProjectDetail from "./pages/project-detail";
 import { Layout } from "@/components/layout";
 
@@ -35,6 +36,9 @@ function Router() {
       </Route>
       <Route path="/auditor">
         <Layout><Auditor /></Layout>
+      </Route>
+      <Route path="/inspector">
+        <Layout><Inspector /></Layout>
       </Route>
       <Route path="/admin">
         <Layout><Admin /></Layout>

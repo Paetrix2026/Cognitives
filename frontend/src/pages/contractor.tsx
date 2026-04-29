@@ -6,14 +6,12 @@ import {
   useListMilestones,
   useUploadMilestoneProof,
   useListOpenTenders,
-  useListTenderBids,
-  useSubmitTenderBid,
   getListMilestonesQueryKey,
   getGetProjectQueryKey,
   getListPendingMilestonesQueryKey,
   getGetAnalyticsOverviewQueryKey,
   getListOpenTendersQueryKey,
-  getListTenderBidsQueryKey,
+  getListProjectsQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +46,7 @@ export default function Contractor() {
           Contractor portal
         </h1>
         <p className="mt-3 text-[14px] text-neutral-600 leading-relaxed max-w-xl">
-          Submit cryptographic proofs against milestones or respond to open government tenders.
+          Submit cryptographic proofs against milestones or claim open government broadcasts.
         </p>
       </header>
 
@@ -56,7 +54,7 @@ export default function Contractor() {
         {([
           { id: "ongoing", label: "Ongoing projects" },
           { id: "proofs", label: "Proof submissions" },
-          { id: "tenders", label: "Open tenders" },
+          { id: "tenders", label: "Broadcast menu" },
         ] as const).map((t) => (
           <button
             key={t.id}
@@ -168,48 +166,39 @@ function OpenTenders({ walletAddress }: { walletAddress: string }) {
   const { data: tenders, isLoading } = useListOpenTenders({
     query: { queryKey: getListOpenTendersQueryKey() },
   });
-  const submitBid = useSubmitTenderBid();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [expandedTenderId, setExpandedTenderId] = useState<string | null>(null);
-  const [agreementDescription, setAgreementDescription] = useState("");
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
-  if (isLoading) return <div className="text-[13px] text-neutral-500">Loading open tenders...</div>;
+  if (isLoading) return <div className="text-[13px] text-neutral-500">Loading open broadcasts...</div>;
   if (!tenders || tenders.length === 0) {
     return (
       <div className="py-16 text-center border-t border-neutral-200">
         <FileText className="h-8 w-8 text-neutral-300 mx-auto mb-3" />
-        <div className="text-[14px] font-medium text-neutral-900 mb-1.5">No open tenders</div>
-        <div className="text-[13px] text-neutral-500">Government officials publish tenders here for contractor selection.</div>
+        <div className="text-[14px] font-medium text-neutral-900 mb-1.5">No open broadcasts</div>
+        <div className="text-[13px] text-neutral-500">Government officials broadcast open projects here. Claiming is first come, first serve.</div>
       </div>
     );
   }
 
-  const handleAgree = (tenderId: string, minimumBid: number) => {
-    if (!agreementDescription.trim()) {
-      toast({ title: "Required", description: "Add a short description before agreeing.", variant: "destructive" });
-      return;
+  const handleClaim = async (tenderId: string) => {
+    setClaimingId(tenderId);
+    try {
+      const res = await fetch(`/api/tenders/${tenderId}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contractorAddress: walletAddress }),
+      });
+      const body = await res.json().catch(() => ({})) as { message?: string };
+      if (!res.ok) throw new Error(body.message ?? "Failed to claim broadcast");
+      toast({ title: "Project claimed", description: "You are now assigned as the contractor for this project." });
+      queryClient.invalidateQueries({ queryKey: getListOpenTendersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    } catch (err) {
+      toast({ title: "Claim failed", description: String(err), variant: "destructive" });
+    } finally {
+      setClaimingId(null);
     }
-
-    submitBid.mutate(
-      {
-        id: tenderId,
-        data: {
-          bidderAddress: walletAddress,
-          proposedAmount: minimumBid,
-          notes: agreementDescription.trim(),
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Agreement submitted", description: "The official can now review your response under this tender." });
-          setExpandedTenderId(null);
-          setAgreementDescription("");
-          queryClient.invalidateQueries({ queryKey: getListOpenTendersQueryKey() });
-        },
-        onError: (err) => toast({ title: "Agreement failed", description: String(err), variant: "destructive" }),
-      }
-    );
   };
 
   return (
@@ -218,13 +207,8 @@ function OpenTenders({ walletAddress }: { walletAddress: string }) {
         <TenderCard
           key={tender.id}
           tender={tender}
-          walletAddress={walletAddress}
-          expandedTenderId={expandedTenderId}
-          setExpandedTenderId={setExpandedTenderId}
-          agreementDescription={agreementDescription}
-          setAgreementDescription={setAgreementDescription}
-          handleAgree={handleAgree}
-          isSubmitting={submitBid.isPending}
+          handleClaim={handleClaim}
+          isClaiming={claimingId === tender.id}
         />
       ))}
     </div>
@@ -233,29 +217,13 @@ function OpenTenders({ walletAddress }: { walletAddress: string }) {
 
 function TenderCard({
   tender,
-  walletAddress,
-  expandedTenderId,
-  setExpandedTenderId,
-  agreementDescription,
-  setAgreementDescription,
-  handleAgree,
-  isSubmitting,
+  handleClaim,
+  isClaiming,
 }: {
   tender: Tender;
-  walletAddress: string;
-  expandedTenderId: string | null;
-  setExpandedTenderId: React.Dispatch<React.SetStateAction<string | null>>;
-  agreementDescription: string;
-  setAgreementDescription: React.Dispatch<React.SetStateAction<string>>;
-  handleAgree: (tenderId: string, minimumBid: number) => void;
-  isSubmitting: boolean;
+  handleClaim: (tenderId: string) => void;
+  isClaiming: boolean;
 }) {
-  const { data: bids } = useListTenderBids(tender.id, {
-    query: { queryKey: getListTenderBidsQueryKey(tender.id) },
-  });
-  const isExpanded = expandedTenderId === tender.id;
-  const hasAgreed = (bids ?? []).some((bid) => bid.bidderAddress.toLowerCase() === walletAddress.toLowerCase());
-
   return (
     <div className="py-6 border-t border-neutral-200 last:border-b">
       <div className="flex items-start justify-between gap-4 mb-3">
@@ -271,55 +239,22 @@ function TenderCard({
           <div className="text-[15px] font-semibold tabular-nums text-neutral-900">
             Rs. {tender.minimumBid.toLocaleString()}
           </div>
-          <div className="text-[10.5px] text-neutral-500 mt-0.5">project budget</div>
+          <div className="text-[10.5px] text-neutral-500 mt-0.5">budget</div>
         </div>
       </div>
       <div className="flex items-center justify-between gap-4">
         <div className="text-[11.5px] text-neutral-500">
-          Closes {new Date(tender.deadline).toLocaleDateString()}
+          Available until {new Date(tender.deadline).toLocaleDateString()}
         </div>
-        {hasAgreed ? (
-          <div className="text-[12.5px] font-medium text-green-700">Agreement submitted</div>
-        ) : !isExpanded ? (
-          <button
-            onClick={() => {
-              setExpandedTenderId(tender.id);
-              setAgreementDescription("");
-            }}
-            className="text-[12.5px] font-medium text-neutral-900 hover:underline underline-offset-4"
-          >
-            Agree
-          </button>
-        ) : (
-          <button
-            onClick={() => setExpandedTenderId(null)}
-            className="text-[12.5px] text-neutral-500 hover:underline underline-offset-4"
-          >
-            Cancel
-          </button>
-        )}
+        <Button
+          size="sm"
+          onClick={() => handleClaim(tender.id)}
+          disabled={isClaiming}
+          className="h-8 px-5 text-[12.5px] font-medium"
+        >
+          {isClaiming ? "Claiming..." : "Claim project"}
+        </Button>
       </div>
-      {!hasAgreed && isExpanded && (
-        <div className="mt-5 pt-5 border-t border-neutral-100 space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-[10.5px] uppercase tracking-[0.1em] text-neutral-500">Description</Label>
-            <Textarea
-              value={agreementDescription}
-              onChange={(e) => setAgreementDescription(e.target.value)}
-              placeholder="Confirm your agreement and add your approach, capacity, or delivery note..."
-              className="resize-none min-h-24 text-[13px]"
-            />
-          </div>
-          <Button
-            size="sm"
-            onClick={() => handleAgree(tender.id, tender.minimumBid)}
-            disabled={isSubmitting}
-            className="h-8 px-5 text-[12.5px] font-medium"
-          >
-            {isSubmitting ? "Submitting..." : "Agree"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

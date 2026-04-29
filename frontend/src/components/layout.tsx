@@ -12,6 +12,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/official", label: "Official", show: user?.role === "GOVT_OFFICIAL" || user?.role === "ADMIN" },
     { href: "/contractor", label: "Contractor", show: user?.role === "CONTRACTOR" || user?.role === "ADMIN" },
     { href: "/auditor", label: "Auditor", show: user?.role === "AUDITOR" || user?.role === "ADMIN" },
+    { href: "/inspector", label: "Inspector", show: user?.role === "INSPECTOR" || user?.role === "ADMIN" },
     { href: "/admin", label: "Admin", show: user?.role === "ADMIN" },
   ].filter(i => i.show);
 

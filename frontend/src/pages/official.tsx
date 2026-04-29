@@ -7,14 +7,11 @@ import {
   useListMilestones,
   usePublishProjectTender,
   useGetProjectTender,
-  useListTenderBids,
-  useAwardTenderBid,
   useReleaseMilestonePayment,
   useCloseProject,
   getListProjectsQueryKey,
   getListOpenTendersQueryKey,
   getGetProjectTenderQueryKey,
-  getListTenderBidsQueryKey,
   getListMilestonesQueryKey,
   getGetProjectQueryKey,
   getGetAnalyticsOverviewQueryKey,
@@ -137,7 +134,7 @@ const CITIES = [
   "Udaipur, Rajasthan"
 ];
 
-type Tab = "project" | "milestone" | "tender" | "payments";
+type Tab = "project" | "milestone" | "assignment" | "payments";
 type MilestonePhase = {
   id: string;
   title: string;
@@ -432,14 +429,14 @@ export default function Official() {
           Manage ledger
         </h1>
         <p className="mt-3 text-[14px] text-neutral-600 leading-relaxed">
-          Create projects for auditor approval, define milestones, manage tenders, and release payments.
+          Create projects for auditor approval, assign contractors, define milestones, and release payments.
         </p>
       </header>
 
       <div className="flex items-center gap-7 border-b border-neutral-200 flex-wrap">
         {([
           { id: "project", label: "New project" },
-          { id: "tender", label: "Tenders" },
+          { id: "assignment", label: "Contractors" },
           { id: "milestone", label: "Add milestone" },
           { id: "payments", label: "Release payments" },
         ] as const).map((t) => (
@@ -458,7 +455,7 @@ export default function Official() {
       {tab === "project" && (
         <form onSubmit={handleCreateProject} className="space-y-7">
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-md text-[12.5px] text-blue-800 leading-relaxed">
-            New projects go to <strong>Pending Approval</strong>. An auditor must approve before tenders open or milestones are created.
+            New projects go to <strong>Pending Approval</strong>. An auditor must approve before broadcasts, direct assignment, or milestones are created.
           </div>
           <Field label="Project title">
             <Input className={inputCls} required value={projectForm.title} onChange={(e) => setProjectForm({ ...projectForm, title: e.target.value })} placeholder="e.g. NH-44 Extension" />
@@ -583,8 +580,8 @@ export default function Official() {
               <Input type="date" className={inputCls} required value={projectForm.endDate} onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })} />
             </Field>
           </div>
-          <Field label="Contractor wallet (optional, or use tender after approval)">
-            <Input className={`${inputCls} font-mono`} value={projectForm.contractorAddress} onChange={(e) => setProjectForm({ ...projectForm, contractorAddress: e.target.value })} placeholder="0x... (leave blank to publish tender)" />
+          <Field label="Contractor wallet (optional, or assign after approval)">
+            <Input className={`${inputCls} font-mono`} value={projectForm.contractorAddress} onChange={(e) => setProjectForm({ ...projectForm, contractorAddress: e.target.value })} placeholder="0x... (leave blank for broadcast/direct assignment)" />
           </Field>
           <div className="pt-4">
             <Button type="submit" className="h-10 px-6 text-[13px] font-medium" disabled={createProject.isPending}>
@@ -750,9 +747,9 @@ export default function Official() {
         </form>
       )}
 
-      {tab === "tender" && (
+      {tab === "assignment" && (
         <div className="space-y-10">
-          <div className="text-[13px] text-neutral-600">Select an active project to manage its tender process.</div>
+          <div className="text-[13px] text-neutral-600">Select an active project, then either broadcast it for first-come-first-serve claiming or directly assign an available contractor. Direct official assignment is final.</div>
           <Select value={tenderProjectId} onValueChange={setTenderProjectId}>
             <SelectTrigger className="h-10 text-[13px] bg-transparent border-0 border-b border-neutral-200 rounded-none px-0 focus:ring-0">
               <SelectValue placeholder="Select active project..." />
@@ -765,7 +762,7 @@ export default function Official() {
               ))}
             </SelectContent>
           </Select>
-          {tenderProjectId && (() => { const tp = activeProjects.find((p) => p.id === tenderProjectId); return tp ? <TenderPanel project={tp} officialAddress={user.walletAddress} /> : null; })()}
+          {tenderProjectId && (() => { const tp = activeProjects.find((p) => p.id === tenderProjectId); return tp ? <AssignmentPanel project={tp} officialAddress={user.walletAddress} /> : null; })()}
         </div>
       )}
 
@@ -774,7 +771,13 @@ export default function Official() {
   );
 }
 
-function TenderPanel({ project, officialAddress }: { project: Project; officialAddress: string }) {
+type ContractorOption = {
+  walletAddress: string;
+  activeAssignments: number;
+  available: boolean;
+};
+
+function AssignmentPanel({ project, officialAddress }: { project: Project; officialAddress: string }) {
   const projectId = project.id;
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -782,9 +785,25 @@ function TenderPanel({ project, officialAddress }: { project: Project; officialA
     query: { queryKey: getGetProjectTenderQueryKey(projectId), retry: false },
   });
   const publishTender = usePublishProjectTender();
+  const [contractors, setContractors] = useState<ContractorOption[]>([]);
+  const [contractorAddress, setContractorAddress] = useState("");
+  const [loadingContractors, setLoadingContractors] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [form, setForm] = useState({
     description: "",
   });
+
+  useEffect(() => {
+    setLoadingContractors(true);
+    fetch("/api/contractors")
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error("Failed to load contractors")))
+      .then((data: ContractorOption[]) => {
+        setContractors(data);
+        setContractorAddress((current) => current || data.find((contractor) => contractor.available)?.walletAddress || data[0]?.walletAddress || "");
+      })
+      .catch((err) => toast({ title: "Contractors unavailable", description: String(err), variant: "destructive" }))
+      .finally(() => setLoadingContractors(false));
+  }, [toast]);
 
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -792,7 +811,7 @@ function TenderPanel({ project, officialAddress }: { project: Project; officialA
       { id: projectId, data: { description: form.description, minimumBid: project.totalBudget, deadline: project.endDate, publishedBy: officialAddress } },
       {
         onSuccess: () => {
-          toast({ title: "Tender published", description: "Open for contractor bids." });
+          toast({ title: "Project broadcast", description: "Contractors can now claim this project on a first-come-first-serve basis." });
           queryClient.invalidateQueries({ queryKey: getGetProjectTenderQueryKey(projectId) });
           queryClient.invalidateQueries({ queryKey: getListOpenTendersQueryKey() });
         },
@@ -801,90 +820,104 @@ function TenderPanel({ project, officialAddress }: { project: Project; officialA
     );
   };
 
-  if (isLoading) return <div className="py-12 flex justify-center text-[13px] text-neutral-500 animate-pulse">Loading tender details...</div>;
-  
-  if (tender) {
-    return (
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <ProjectTenderBrief project={project} />
-        
-        <div className="relative rounded-2xl border border-blue-100/50 bg-white/60 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none transform translate-x-1/2 -translate-y-1/2" />
-          
-          <div className="p-6 sm:p-8 relative z-10">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-neutral-100">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold tracking-tight text-neutral-900">Active Tender</h3>
-                  <p className="text-[13px] text-neutral-500 mt-1">Accepting contractor proposals</p>
-                </div>
-              </div>
-              <Badge variant={tender.status === "OPEN" ? "default" : "secondary"} className="self-start sm:self-auto px-3 py-1 text-xs font-medium uppercase tracking-wider rounded-full shadow-sm">
-                {tender.status}
-              </Badge>
-            </div>
-            
-            <div className="grid gap-6 sm:grid-cols-2 mb-8">
-              <div className="bg-neutral-50/50 rounded-xl p-4 border border-neutral-100">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-neutral-500 font-medium mb-2">
-                  <DollarSign className="w-3.5 h-3.5" /> Minimum Bid
-                </div>
-                <div className="text-xl font-semibold tabular-nums text-neutral-900">Rs. {tender.minimumBid.toLocaleString()}</div>
-              </div>
-              <div className="bg-neutral-50/50 rounded-xl p-4 border border-neutral-100">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-neutral-500 font-medium mb-2">
-                  <Clock className="w-3.5 h-3.5" /> Deadline
-                </div>
-                <div className="text-xl font-medium text-neutral-900">{new Date(tender.deadline).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-              </div>
-            </div>
+  const handleDirectAssign = async () => {
+    if (!contractorAddress) {
+      toast({ title: "Select contractor", description: "Choose an available contractor wallet.", variant: "destructive" });
+      return;
+    }
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assign-contractor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contractorAddress, officialAddress }),
+      });
+      const body = await res.json().catch(() => ({})) as { message?: string };
+      if (!res.ok) throw new Error(body.message ?? "Failed to assign contractor");
+      toast({ title: "Contractor assigned", description: "Official assignment is final and the project is now allocated." });
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      queryClient.invalidateQueries({ queryKey: getListOpenTendersQueryKey() });
+    } catch (err) {
+      toast({ title: "Assignment failed", description: String(err), variant: "destructive" });
+    } finally {
+      setAssigning(false);
+    }
+  };
 
-            <div className="mb-8">
-              <div className="text-[11px] uppercase tracking-wider text-neutral-500 font-medium mb-3">Tender Requirements</div>
-              <p className="text-[14px] leading-relaxed text-neutral-700 bg-white p-5 rounded-xl border border-neutral-100 shadow-sm">
-                {tender.description}
-              </p>
-            </div>
-            
-            {tender.status === "OPEN" && (
-              <div className="pt-6 border-t border-neutral-100">
-                <BidList tenderId={tender.id} />
-              </div>
-            )}
-            
-            {tender.status === "AWARDED" && (
-              <div className="flex items-center gap-3 text-[14px] font-medium text-emerald-700 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                <div className="p-1 bg-emerald-100 rounded-full">
-                  <CheckCircle className="h-4 w-4" />
-                </div>
-                Contractor successfully awarded for this tender
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const alreadyAssigned = project.contractorAddress !== "0x0000000000000000000000000000000000000000";
 
   return (
-    <form onSubmit={handlePublish} className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <ProjectTenderBrief project={project} />
-      
-      <div className="rounded-2xl border border-neutral-200/60 bg-white/50 backdrop-blur-md shadow-sm p-6 sm:p-8">
+
+      {alreadyAssigned && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-[13px] text-emerald-800">
+          Assigned contractor: <span className="font-mono">{project.contractorAddress}</span>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-neutral-200/60 bg-white/50 backdrop-blur-md shadow-sm p-6 sm:p-8 space-y-7">
+        <div className="flex items-center gap-3 pb-6 border-b border-neutral-100">
+          <div className="p-2.5 bg-neutral-100 text-neutral-600 rounded-xl">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold tracking-tight text-neutral-900">Direct assignment</h3>
+            <p className="text-[13px] text-neutral-500 mt-1">Choose an available contractor. No rejection step is created.</p>
+          </div>
+        </div>
+
+        <Field label="Available contractor">
+          <Select value={contractorAddress} onValueChange={setContractorAddress} disabled={loadingContractors || alreadyAssigned}>
+            <SelectTrigger className="h-10 text-[13px] bg-transparent border-0 border-b border-neutral-200 rounded-none px-0 focus:ring-0">
+              <SelectValue placeholder={loadingContractors ? "Loading contractors..." : "Select contractor..."} />
+            </SelectTrigger>
+            <SelectContent>
+              {contractors.map((contractor) => (
+                <SelectItem key={contractor.walletAddress} value={contractor.walletAddress} disabled={!contractor.available} className="text-[13px]">
+                  <span className="font-mono">{contractor.walletAddress.slice(0, 10)}...{contractor.walletAddress.slice(-6)}</span>
+                  <span className="ml-2 text-neutral-500">{contractor.available ? "Available" : `${contractor.activeAssignments} active`}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={() => void handleDirectAssign()} disabled={assigning || alreadyAssigned || !contractorAddress} className="h-10 px-6 text-[13px] font-medium">
+            {assigning ? "Assigning..." : "Assign directly"}
+          </Button>
+        </div>
+      </div>
+
+      <form onSubmit={handlePublish} className="rounded-2xl border border-neutral-200/60 bg-white/50 backdrop-blur-md shadow-sm p-6 sm:p-8">
         <div className="flex items-center gap-3 mb-6 pb-6 border-b border-neutral-100">
           <div className="p-2.5 bg-neutral-100 text-neutral-600 rounded-xl">
             <FileCheck className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold tracking-tight text-neutral-900">Publish New Tender</h3>
-            <p className="text-[13px] text-neutral-500 mt-1">Open this project for contractor bidding</p>
+            <h3 className="text-lg font-semibold tracking-tight text-neutral-900">Broadcast project</h3>
+            <p className="text-[13px] text-neutral-500 mt-1">First contractor to claim gets assigned automatically.</p>
           </div>
         </div>
 
-        <Field label="Tender requirements & description">
+        {isLoading ? (
+          <div className="py-8 text-center text-[13px] text-neutral-500">Checking broadcast state...</div>
+        ) : tender ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[14px] font-medium text-neutral-900">Broadcast {tender.status.toLowerCase()}</div>
+                <div className="text-[12px] text-neutral-500 mt-1">Available until {new Date(tender.deadline).toLocaleDateString()}</div>
+              </div>
+              <Badge variant={tender.status === "OPEN" ? "default" : "secondary"}>{tender.status}</Badge>
+            </div>
+            <p className="text-[13px] text-neutral-700 leading-relaxed border border-neutral-100 bg-white rounded-xl p-4">{tender.description}</p>
+          </div>
+        ) : (
+          <>
+        <Field label="Broadcast requirements & description">
           <Textarea
             required
             value={form.description}
@@ -895,12 +928,14 @@ function TenderPanel({ project, officialAddress }: { project: Project; officialA
         </Field>
         
         <div className="pt-6 mt-6 border-t border-neutral-100 flex justify-end">
-          <Button type="submit" className="h-11 px-8 text-[14px] font-medium rounded-xl shadow-sm transition-all hover:shadow hover:-translate-y-0.5" disabled={publishTender.isPending}>
-            {publishTender.isPending ? "Publishing Tender..." : "Publish Tender"}
+          <Button type="submit" className="h-11 px-8 text-[14px] font-medium rounded-xl shadow-sm transition-all hover:shadow hover:-translate-y-0.5" disabled={publishTender.isPending || alreadyAssigned}>
+            {publishTender.isPending ? "Broadcasting..." : "Broadcast project"}
           </Button>
         </div>
-      </div>
-    </form>
+          </>
+        )}
+      </form>
+    </div>
   );
 }
 
@@ -946,90 +981,6 @@ function ProjectTenderBrief({ project }: { project: Project }) {
           </div>
           <p className="text-[14px] leading-relaxed text-neutral-600">{project.description}</p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BidList({ tenderId }: { tenderId: string }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { data: bids } = useListTenderBids(tenderId, { query: { queryKey: getListTenderBidsQueryKey(tenderId) } });
-  const awardBid = useAwardTenderBid();
-
-  if (!bids || bids.length === 0) {
-    return (
-      <div className="py-12 flex flex-col items-center justify-center text-center bg-neutral-50/50 rounded-xl border border-dashed border-neutral-200">
-        <Users className="w-8 h-8 text-neutral-300 mb-3" />
-        <div className="text-[14px] font-medium text-neutral-900">No bids received yet</div>
-        <div className="text-[13px] text-neutral-500 mt-1">Contractors will appear here once they submit proposals</div>
-      </div>
-    );
-  }
-  
-  const pending = bids.filter((b) => b.status === "PENDING").sort((a, b) => a.proposedAmount - b.proposedAmount);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-neutral-500 font-medium mb-5">
-        <Users className="w-3.5 h-3.5" />
-        {pending.length} Contractor Bid{pending.length !== 1 ? "s" : ""}
-      </div>
-      
-      <div className="grid gap-4">
-        {pending.map((bid, i) => (
-          <div key={bid.id} className="group relative flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-xl border border-neutral-200 bg-white hover:border-blue-200 hover:shadow-md transition-all duration-300 overflow-hidden">
-            {i === 0 && (
-              <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-            )}
-            
-            <div className="flex-1 pr-6">
-              <div className="flex items-center gap-3 mb-2">
-                {i === 0 && (
-                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-md">
-                    Lowest Bid
-                  </Badge>
-                )}
-                <div className="flex items-center gap-1.5 text-[13px] font-mono text-neutral-500 bg-neutral-100 px-2 py-1 rounded-md">
-                  <Lock className="w-3 h-3" />
-                  {bid.bidderAddress.slice(0, 8)}...{bid.bidderAddress.slice(-6)}
-                </div>
-              </div>
-              
-              <div className="text-[18px] font-semibold tabular-nums tracking-tight text-neutral-900 mb-1.5">
-                Rs. {bid.proposedAmount.toLocaleString()}
-              </div>
-              
-              {bid.notes && (
-                <div className="text-[13px] text-neutral-600 line-clamp-2">
-                  <span className="font-medium text-neutral-900 mr-1">Proposal:</span>
-                  {bid.notes}
-                </div>
-              )}
-            </div>
-            
-            <div className="mt-4 sm:mt-0 w-full sm:w-auto shrink-0">
-              <Button
-                onClick={() =>
-                  awardBid.mutate(
-                    { id: tenderId, bidId: bid.id },
-                    {
-                      onSuccess: () => {
-                        toast({ title: "Contractor awarded successfully!" });
-                        queryClient.invalidateQueries();
-                      },
-                      onError: (err) => toast({ title: "Failed to award", description: String(err), variant: "destructive" }),
-                    }
-                  )
-                }
-                disabled={awardBid.isPending}
-                className="w-full sm:w-auto h-10 px-6 text-[13px] font-medium rounded-lg shadow-sm"
-              >
-                Award Contract
-              </Button>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
