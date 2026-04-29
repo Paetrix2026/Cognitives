@@ -1,11 +1,16 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { formatWalletAddress, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { LogOut, Shield } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const [cachedName, setCachedName] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCachedName(localStorage.getItem("dt_name"));
+  }, []);
 
   const navItems = [
     { href: "/citizen", label: "Ledger", show: true },
@@ -17,8 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ].filter(i => i.show);
 
   const roleLabel = user?.role.replace(/_/g, " ").toLowerCase();
-  const displayName = user?.profile?.name || (user ? "Verified wallet" : "");
-  const displayEmail = user?.profile?.email;
+  const displayName = user?.profile?.name ?? cachedName;
 
   return (
     <div className="min-h-screen bg-white text-neutral-900" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
@@ -64,10 +68,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {user ? (
             <div className="flex items-center gap-3 shrink-0">
               <div className="hidden sm:flex flex-col items-end leading-tight">
-                <span className="text-[11px] text-neutral-500 capitalize">{displayEmail || roleLabel}</span>
-                <span className="text-[11px] font-medium text-neutral-900">
-                  {displayName}
-                  <span className="font-mono text-neutral-500 ml-1">{formatWalletAddress(user.walletAddress)}</span>
+                <span className="text-[13px] font-semibold text-neutral-900">
+                  {displayName ?? <span className="capitalize">{roleLabel}</span>}
+                </span>
+                <span className="text-[10.5px] font-mono text-neutral-400">
+                  {user.walletAddress.substring(0, 6)}…{user.walletAddress.substring(38)}
                 </span>
               </div>
               <button

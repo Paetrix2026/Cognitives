@@ -34,6 +34,60 @@ const PROJECT_REGISTRY_ABI = [
   "event ProjectSpentUpdated(uint256 indexed projectId, uint256 spentAmount)",
 ];
 
+type ChainEventHandler = (...args: unknown[]) => Promise<void> | void;
+
+interface ChainListener {
+  contract: ethers.Contract;
+  eventName: string;
+  handler: ChainEventHandler;
+}
+
+const POLL_INTERVAL_MS = Number(process.env.BLOCKCHAIN_EVENT_POLL_MS ?? "12000");
+
+function listen(contract: ethers.Contract, eventName: string, handler: ChainEventHandler, listeners: ChainListener[]) {
+  listeners.push({ contract, eventName, handler });
+}
+
+function startEventPolling(provider: ethers.JsonRpcProvider, listeners: ChainListener[]) {
+  let nextBlock: number | null = null;
+  let polling = false;
+
+  const poll = async () => {
+    if (polling) return;
+    polling = true;
+    try {
+      const latestBlock = await provider.getBlockNumber();
+      if (nextBlock === null) {
+        nextBlock = latestBlock + 1;
+        return;
+      }
+      if (latestBlock < nextBlock) return;
+
+      for (const listener of listeners) {
+        const filters = listener.contract.filters as unknown as Record<string, (() => ethers.DeferredTopicFilter) | undefined>;
+        const filter = filters[listener.eventName]?.();
+        if (!filter) continue;
+
+        const logs = await listener.contract.queryFilter(filter, nextBlock, latestBlock);
+        for (const log of logs) {
+          if (!("args" in log)) continue;
+          await listener.handler(...Array.from(log.args));
+        }
+      }
+
+      nextBlock = latestBlock + 1;
+    } catch (err) {
+      logger.warn({ err }, "Blockchain event polling failed; will retry");
+    } finally {
+      polling = false;
+    }
+  };
+
+  void poll();
+  const timer = setInterval(() => void poll(), Math.max(POLL_INTERVAL_MS, 1000));
+  timer.unref?.();
+}
+
 export function startBlockchainListener() {
   const rpcUrl = getBlockchainRpcUrl();
   const registryAddr = process.env.PROJECT_REGISTRY_ADDRESS;
@@ -55,10 +109,11 @@ export function startBlockchainListener() {
 
   const registry = new ethers.Contract(registryAddr, PROJECT_REGISTRY_ABI, provider);
   const escrow = new ethers.Contract(escrowAddr, MILESTONE_ESCROW_ABI, provider);
+  const listeners: ChainListener[] = [];
 
   // ── ProjectRegistry events ─────────────────────────────────────────────────
 
-  registry.on("ProjectCreated", async (projectId: bigint, title: string, officialAddress: string, contractorAddress: string, totalBudget: bigint) => {
+  listen(registry, "ProjectCreated", async (projectId: bigint, title: string, officialAddress: string, contractorAddress: string, totalBudget: bigint) => {
     const idStr = projectId.toString();
     if (projects.find((p) => p.id === idStr)) return; // API route already added it
     const project = {
@@ -81,9 +136,9 @@ export function startBlockchainListener() {
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     publishLedgerEvent({ type: "activity.created", projectId: idStr, activityId: activity.id });
     logger.info({ projectId: idStr }, "Chain: project created");
-  });
+  }, listeners);
 
-  registry.on("ProjectApproved", async (projectId: bigint) => {
+  listen(registry, "ProjectApproved", async (projectId: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -92,9 +147,9 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr }, "Chain: project approved");
-  });
+  }, listeners);
 
-  registry.on("ProjectRejected", async (projectId: bigint) => {
+  listen(registry, "ProjectRejected", async (projectId: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -103,9 +158,9 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr }, "Chain: project rejected");
-  });
+  }, listeners);
 
-  registry.on("ProjectPaused", async (projectId: bigint) => {
+  listen(registry, "ProjectPaused", async (projectId: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -114,9 +169,9 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr }, "Chain: project paused");
-  });
+  }, listeners);
 
-  registry.on("ProjectResumed", async (projectId: bigint) => {
+  listen(registry, "ProjectResumed", async (projectId: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -125,9 +180,9 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr }, "Chain: project resumed");
-  });
+  }, listeners);
 
-  registry.on("ProjectClosed", async (projectId: bigint) => {
+  listen(registry, "ProjectClosed", async (projectId: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -136,9 +191,9 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr }, "Chain: project closed");
-  });
+  }, listeners);
 
-  registry.on("ContractorAssigned", async (projectId: bigint, contractor: string) => {
+  listen(registry, "ContractorAssigned", async (projectId: bigint, contractor: string) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
@@ -147,20 +202,20 @@ export function startBlockchainListener() {
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
     logger.info({ projectId: idStr, contractor }, "Chain: contractor assigned");
-  });
+  }, listeners);
 
-  registry.on("ProjectSpentUpdated", async (projectId: bigint, spentAmount: bigint) => {
+  listen(registry, "ProjectSpentUpdated", async (projectId: bigint, spentAmount: bigint) => {
     const idStr = projectId.toString();
     const project = projects.find((p) => p.id === idStr);
     if (!project) return;
     project.spentAmount = Number(spentAmount);
     await persistProject(project);
     publishLedgerEvent({ type: "project.updated", projectId: idStr });
-  });
+  }, listeners);
 
   // ── MilestoneEscrow events ─────────────────────────────────────────────────
 
-  escrow.on("MilestoneCreated", async (milestoneId: bigint, projectId: bigint) => {
+  listen(escrow, "MilestoneCreated", async (milestoneId: bigint, projectId: bigint) => {
     const idStr = milestoneId.toString();
     const projIdStr = projectId.toString();
     if (milestones.find((m) => m.id === idStr)) return; // API route already added it
@@ -177,9 +232,9 @@ export function startBlockchainListener() {
     await persistMilestone(milestone);
     publishLedgerEvent({ type: "milestone.updated", projectId: projIdStr, milestoneId: idStr });
     logger.info({ milestoneId: idStr, projectId: projIdStr }, "Chain: milestone created");
-  });
+  }, listeners);
 
-  escrow.on("ProofSubmitted", async (milestoneId: bigint, ipfsCID: string, latitude: bigint, longitude: bigint, submittedBy: string) => {
+  listen(escrow, "ProofSubmitted", async (milestoneId: bigint, ipfsCID: string, latitude: bigint, longitude: bigint, submittedBy: string) => {
     const idStr = milestoneId.toString();
     const milestone = milestones.find((m) => m.id === idStr);
     if (!milestone) return;
@@ -197,9 +252,9 @@ export function startBlockchainListener() {
     publishLedgerEvent({ type: "milestone.updated", projectId: milestone.projectId, milestoneId: idStr });
     publishLedgerEvent({ type: "activity.created", projectId: milestone.projectId, activityId: activity.id });
     logger.info({ milestoneId: idStr, cid: ipfsCID }, "Chain: proof submitted");
-  });
+  }, listeners);
 
-  escrow.on("MilestoneApproved", async (milestoneId: bigint, _approvedBy: string, approvalCount: bigint) => {
+  listen(escrow, "MilestoneApproved", async (milestoneId: bigint, _approvedBy: string, approvalCount: bigint) => {
     const idStr = milestoneId.toString();
     const milestone = milestones.find((m) => m.id === idStr);
     if (!milestone) return;
@@ -214,9 +269,9 @@ export function startBlockchainListener() {
     publishLedgerEvent({ type: "milestone.updated", projectId: milestone.projectId, milestoneId: idStr });
     publishLedgerEvent({ type: "project.updated", projectId: milestone.projectId });
     logger.info({ milestoneId: idStr, approvalCount: Number(approvalCount) }, "Chain: milestone approved");
-  });
+  }, listeners);
 
-  escrow.on("FundsReleased", async (milestoneId: bigint, amount: bigint, contractorAddress: string) => {
+  listen(escrow, "FundsReleased", async (milestoneId: bigint, amount: bigint, contractorAddress: string) => {
     const idStr = milestoneId.toString();
     const milestone = milestones.find((m) => m.id === idStr);
     if (!milestone) return;
@@ -233,9 +288,9 @@ export function startBlockchainListener() {
     publishLedgerEvent({ type: "project.updated", projectId: milestone.projectId });
     publishLedgerEvent({ type: "activity.created", projectId: milestone.projectId, activityId: activity.id });
     logger.info({ milestoneId: idStr, amount: amount.toString() }, "Chain: funds released");
-  });
+  }, listeners);
 
-  escrow.on("MilestoneRejected", async (milestoneId: bigint, reason: string) => {
+  listen(escrow, "MilestoneRejected", async (milestoneId: bigint, reason: string) => {
     const idStr = milestoneId.toString();
     const milestone = milestones.find((m) => m.id === idStr);
     if (!milestone) return;
@@ -247,7 +302,8 @@ export function startBlockchainListener() {
     await persistMilestone(milestone);
     publishLedgerEvent({ type: "milestone.updated", projectId: milestone.projectId, milestoneId: idStr });
     logger.info({ milestoneId: idStr }, "Chain: milestone rejected");
-  });
+  }, listeners);
 
+  startEventPolling(provider, listeners);
   logger.info({ registry: registryAddr, escrow: escrowAddr }, "Blockchain listener active");
 }

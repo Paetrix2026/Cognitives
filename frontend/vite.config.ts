@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 const rawPort = process.env.PORT ?? "5173";
 
@@ -20,11 +19,6 @@ const apiProxyTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:3001";
 export default defineConfig({
   base: basePath,
   plugins: [
-    nodePolyfills({
-      include: ["buffer", "process", "util", "stream", "events"],
-      globals: { Buffer: true, global: true, process: true },
-      protocolImports: true,
-    }),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

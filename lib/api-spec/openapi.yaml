@@ -67,6 +67,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthVerifyResponse"
+  /auth/privy-profile:
+    post:
+      operationId: syncPrivyProfile
+      tags: [auth]
+      summary: Store Privy and linked Google profile for a verified wallet user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrivyProfileRequest"
+      responses:
+        "200":
+          description: Privy profile stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivyProfileResponse"
   /projects:
     get:
       operationId: listProjects
@@ -353,6 +373,10 @@ paths:
                 items:
                   $ref: "#/components/schemas/AnomalyFlag"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object
@@ -388,7 +412,20 @@ components:
         role:
           type: string
           enum: [ADMIN, GOVT_OFFICIAL, CONTRACTOR, AUDITOR, INSPECTOR, CITIZEN]
+        profile:
+          $ref: "#/components/schemas/AuthProfile"
       required: [walletAddress, role]
+    AuthProfile:
+      type: object
+      properties:
+        privyDid:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: string
     AuthVerifyResponse:
       type: object
       properties:
@@ -397,6 +434,26 @@ components:
         user:
           $ref: "#/components/schemas/User"
       required: [token, user]
+    PrivyProfileRequest:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+        privyDid:
+          type: string
+        googleEmail:
+          type: string
+        googleName:
+          type: string
+        googleAvatarUrl:
+          type: string
+      required: [walletAddress, googleEmail, googleName]
+    PrivyProfileResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+      required: [user]
     Project:
       type: object
       properties:

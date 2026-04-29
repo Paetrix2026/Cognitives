@@ -1,142 +1,62 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { BrowserProvider } from "ethers";
-import { Web3Auth } from "@web3auth/modal";
-import { CHAIN_NAMESPACES, WEB3AUTH_NETWORK, type IProvider, type UserInfo } from "@web3auth/base";
 import { createAuthNonce, setAuthTokenGetter, verifyWalletSignature } from "@workspace/api-client-react";
 import type { User, UserRole } from "@workspace/api-zod";
 
 setAuthTokenGetter(() => (typeof localStorage === "undefined" ? null : localStorage.getItem("dt_token")));
 
-export interface Web3AuthProfile {
-  name?: string;
+export interface AuthProfile {
+  privyDid?: string;
   email?: string;
-  profileImage?: string;
-  walletAddress: string;
-  loginProvider?: string;
+  name?: string;
+  avatarUrl?: string;
 }
 
 export type AuthUser = User & {
-  profile?: Web3AuthProfile;
+  profile?: AuthProfile;
 };
+
+export interface PrivyProfileInput {
+  walletAddress: string;
+  privyDid?: string;
+  googleEmail?: string;
+  googleName?: string;
+  googleAvatarUrl?: string;
+}
 
 interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   login: (role?: UserRole, forceDemo?: boolean, demoWallet?: string) => Promise<AuthUser>;
+  syncPrivyProfile: (profile: PrivyProfileInput) => Promise<AuthUser>;
   logout: () => void;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const WEB3AUTH_CLIENT_ID = import.meta.env.VITE_WEB3AUTH_CLIENT_ID ?? "";
-const WEB3AUTH_CONFIGURED = WEB3AUTH_CLIENT_ID.length > 0 && WEB3AUTH_CLIENT_ID !== "YOUR_WEB3AUTH_CLIENT_ID";
+async function loginWithMetaMask(): Promise<{ token: string; user: User }> {
+  const ethereum = (window as Window & { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+  if (!ethereum) throw new Error("MetaMask not installed");
 
-const chainConfig = {
-  chainNamespace: CHAIN_NAMESPACES.EIP155,
-  chainId: import.meta.env.VITE_WEB3AUTH_CHAIN_ID || "0x1",
-  rpcTarget: import.meta.env.VITE_WEB3AUTH_RPC_TARGET || "https://rpc.ankr.com/eth",
-  displayName: import.meta.env.VITE_WEB3AUTH_CHAIN_NAME || "Ethereum Mainnet",
-  blockExplorerUrl: import.meta.env.VITE_WEB3AUTH_BLOCK_EXPLORER || "https://etherscan.io",
-  ticker: "ETH",
-  tickerName: "Ethereum",
-  logo: "https://web3auth.io/images/web3authlog.png",
-};
-
-let web3authInstance: Web3Auth | null = null;
-let web3authInitPromise: Promise<Web3Auth> | null = null;
-
-async function getWeb3Auth(): Promise<Web3Auth> {
-  if (!WEB3AUTH_CONFIGURED) throw new Error("Web3Auth is not configured. Set VITE_WEB3AUTH_CLIENT_ID to enable social login.");
-  if (web3authInstance) return web3authInstance;
-  if (!web3authInitPromise) {
-    const web3auth = new Web3Auth({
-      clientId: WEB3AUTH_CLIENT_ID,
-      web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET,
-      chains: [chainConfig],
-      uiConfig: {
-        appName: "DecentraliTrack",
-        loginMethodsOrder: ["google", "metamask"],
-      },
-    });
-
-    web3authInitPromise = web3auth.init().then(() => {
-      web3authInstance = web3auth;
-      return web3auth;
-    }).catch((err) => {
-      web3authInitPromise = null; // allow retry after failure
-      throw err;
-    });
-  }
-
-  return web3authInitPromise;
-}
-
-function profileFromWeb3Auth(userInfo: Partial<UserInfo> | null, walletAddress: string): Web3AuthProfile {
-  return {
-    name: userInfo?.name || undefined,
-    email: userInfo?.email || undefined,
-    profileImage: userInfo?.profileImage || undefined,
-    walletAddress,
-    loginProvider: userInfo?.typeOfLogin || userInfo?.aggregateVerifier || undefined,
-  };
-}
-
-async function loginWithWeb3Auth(): Promise<{ token: string; user: AuthUser }> {
-  const web3auth = await getWeb3Auth();
-  const web3authProvider = await web3auth.connect();
-  if (!web3authProvider) throw new Error("Web3Auth did not return a wallet provider");
-
-  const provider = new BrowserProvider(web3authProvider as IProvider);
+  const provider = new BrowserProvider(ethereum);
+  await provider.send("eth_requestAccounts", []);
   const signer = await provider.getSigner();
   const walletAddress = await signer.getAddress();
-  const userInfo = await web3auth.getUserInfo();
 
   const { nonce } = await createAuthNonce({ walletAddress });
   const signature = await signer.signMessage(nonce);
-  const result = await verifyWalletSignature({ walletAddress, signature });
-
-  return {
-    ...result,
-    user: {
-      ...result.user,
-      profile: profileFromWeb3Auth(userInfo, walletAddress),
-    },
-  };
+  return verifyWalletSignature({ walletAddress, signature });
 }
 
-const DEMO_PROFILES: Record<string, Omit<Web3AuthProfile, "walletAddress">> = {
-  "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc": {
-    name: "Contractor 1",
-    email: "contractor.one@demo.local",
-    loginProvider: "demo",
-  },
-  "0x90f79bf6eb2c4f870365e785982e1f101e93b906": {
-    name: "Contractor 2",
-    email: "contractor.two@demo.local",
-    loginProvider: "demo",
-  },
-};
-
-async function loginDemo(role: UserRole, walletAddress: string): Promise<{ token: string; user: AuthUser }> {
+async function loginDemo(role: UserRole, walletAddress: string): Promise<{ token: string; user: User }> {
   await createAuthNonce({ walletAddress });
   const result = await verifyWalletSignature({ walletAddress, signature: "demo" });
-  const demoProfile = DEMO_PROFILES[walletAddress.toLowerCase()];
-  return {
-    ...result,
-    user: {
-      walletAddress,
-      role,
-      profile: {
-        ...demoProfile,
-        walletAddress,
-      },
-    },
-  };
+  return { ...result, user: { walletAddress, role } };
 }
 
-export function formatWalletAddress(walletAddress: string): string {
-  return `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}`;
+export function hasMetaMask(): boolean {
+  return Boolean((window as Window & { ethereum?: unknown }).ethereum);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -159,20 +79,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (!WEB3AUTH_CONFIGURED) return;
-    void getWeb3Auth().catch((err) => {
-      console.error("Web3Auth initialization failed", err);
-    });
-  }, []);
-
   const login = async (role: UserRole = "CITIZEN", forceDemo = false, demoWallet?: string): Promise<AuthUser> => {
-    const useDemo = forceDemo;
+    const useDemo = forceDemo || !hasMetaMask();
     const { token: newToken, user: newUser } = useDemo
       ? await loginDemo(role, demoWallet ?? "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65")
-      : await loginWithWeb3Auth();
+      : await loginWithMetaMask();
 
-    // Web3Auth: role comes from server (on-chain or DB); demo: use selected role.
+    // MetaMask: role comes from server (on-chain or DB); demo: use selected role
     const finalUser: AuthUser = useDemo ? { ...newUser, role } : newUser;
 
     setUser(finalUser);
@@ -182,10 +95,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return finalUser;
   };
 
-  const logout = () => {
-    if (WEB3AUTH_CONFIGURED) {
-      void getWeb3Auth().then((web3auth) => web3auth.logout({ cleanup: true })).catch(() => undefined);
+  const syncPrivyProfile = async (profile: PrivyProfileInput): Promise<AuthUser> => {
+    const activeToken = token ?? localStorage.getItem("dt_token");
+    if (!activeToken) throw new Error("Wallet session is required before linking Google");
+
+    const response = await fetch("/api/auth/privy-profile", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${activeToken}`,
+      },
+      body: JSON.stringify(profile),
+    });
+
+    const data = await response.json().catch(() => null) as { user?: AuthUser; message?: string } | null;
+    if (!response.ok || !data?.user) {
+      throw new Error(data?.message ?? "Failed to store Privy profile");
     }
+
+    setUser(data.user);
+    localStorage.setItem("dt_user", JSON.stringify(data.user));
+    return data.user;
+  };
+
+  const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem("dt_token");
@@ -193,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, syncPrivyProfile, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

@@ -169,6 +169,14 @@ export default function Official() {
   const createMilestone = useCreateMilestone();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [contractors, setContractors] = useState<ContractorOption[]>([]);
+
+  useEffect(() => {
+    fetch("/api/contractors")
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error("Failed to load contractors")))
+      .then((data: ContractorOption[]) => setContractors(data))
+      .catch(() => {});
+  }, []);
   const deleteMilestone = useMutation({
     mutationFn: async (milestoneId: string) => {
       const res = await fetch(`/api/milestones/${milestoneId}`, { method: "DELETE" });
@@ -439,7 +447,7 @@ export default function Official() {
       <div className="flex items-center gap-7 border-b border-neutral-200 flex-wrap">
         {([
           { id: "project", label: "New project" },
-          { id: "assignment", label: "Contractors" },
+          { id: "assignment", label: "Assignment" },
           { id: "milestone", label: "Add milestone" },
           { id: "payments", label: "Release payments" },
         ] as const).map((t) => (
@@ -780,22 +788,31 @@ export default function Official() {
               ))}
             </SelectContent>
           </Select>
-          {tenderProjectId && (() => { const tp = activeProjects.find((p) => p.id === tenderProjectId); return tp ? <AssignmentPanel project={tp} officialAddress={user.walletAddress} /> : null; })()}
+          {tenderProjectId && (() => { const tp = activeProjects.find((p) => p.id === tenderProjectId); return tp ? <AssignmentPanel project={tp} officialAddress={user.walletAddress} contractors={contractors} /> : null; })()}
         </div>
       )}
 
-      {tab === "payments" && <PaymentsPanel projects={projects ?? []} officialAddress={user.walletAddress} />}
+      {tab === "payments" && <PaymentsPanel projects={projects ?? []} officialAddress={user.walletAddress} contractors={contractors} />}
     </div>
   );
 }
 
 type ContractorOption = {
   walletAddress: string;
+  name: string | null;
   activeAssignments: number;
   available: boolean;
 };
 
-function AssignmentPanel({ project, officialAddress }: { project: Project; officialAddress: string }) {
+function shortAddr(addr: string) {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function contractorLabel(c: ContractorOption) {
+  return c.name ?? shortAddr(c.walletAddress);
+}
+
+function AssignmentPanel({ project, officialAddress, contractors }: { project: Project; officialAddress: string; contractors: ContractorOption[] }) {
   const projectId = project.id;
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -803,25 +820,13 @@ function AssignmentPanel({ project, officialAddress }: { project: Project; offic
     query: { queryKey: getGetProjectTenderQueryKey(projectId), retry: false },
   });
   const publishTender = usePublishProjectTender();
-  const [contractors, setContractors] = useState<ContractorOption[]>([]);
   const [contractorAddress, setContractorAddress] = useState("");
-  const [loadingContractors, setLoadingContractors] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [form, setForm] = useState({
-    description: "",
-  });
+  const [form, setForm] = useState({ description: "" });
 
   useEffect(() => {
-    setLoadingContractors(true);
-    fetch("/api/contractors")
-      .then((res) => res.ok ? res.json() : Promise.reject(new Error("Failed to load contractors")))
-      .then((data: ContractorOption[]) => {
-        setContractors(data);
-        setContractorAddress((current) => current || data.find((contractor) => contractor.available)?.walletAddress || data[0]?.walletAddress || "");
-      })
-      .catch((err) => toast({ title: "Contractors unavailable", description: String(err), variant: "destructive" }))
-      .finally(() => setLoadingContractors(false));
-  }, [toast]);
+    setContractorAddress((current) => current || contractors.find((c) => c.available)?.walletAddress || contractors[0]?.walletAddress || "");
+  }, [contractors]);
 
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -869,11 +874,16 @@ function AssignmentPanel({ project, officialAddress }: { project: Project; offic
     <div className="space-y-8 animate-in fade-in duration-500">
       <ProjectTenderBrief project={project} />
 
-      {alreadyAssigned && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-[13px] text-emerald-800">
-          Assigned contractor: <span className="font-mono">{project.contractorAddress}</span>
-        </div>
-      )}
+      {alreadyAssigned && (() => {
+        const assigned = contractors.find(c => c.walletAddress.toLowerCase() === project.contractorAddress.toLowerCase());
+        return (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-[13px] text-emerald-800">
+            Assigned contractor:{" "}
+            <span className="font-medium">{assigned ? contractorLabel(assigned) : shortAddr(project.contractorAddress)}</span>
+            <span className="ml-2 font-mono text-emerald-600 text-[11px]">({shortAddr(project.contractorAddress)})</span>
+          </div>
+        );
+      })()}
 
       <div className="rounded-2xl border border-neutral-200/60 bg-white/50 backdrop-blur-md shadow-sm p-6 sm:p-8 space-y-7">
         <div className="flex items-center gap-3 pb-6 border-b border-neutral-100">
@@ -887,14 +897,15 @@ function AssignmentPanel({ project, officialAddress }: { project: Project; offic
         </div>
 
         <Field label="Available contractor">
-          <Select value={contractorAddress} onValueChange={setContractorAddress} disabled={loadingContractors || alreadyAssigned}>
+          <Select value={contractorAddress} onValueChange={setContractorAddress} disabled={alreadyAssigned}>
             <SelectTrigger className="h-10 text-[13px] bg-transparent border-0 border-b border-neutral-200 rounded-none px-0 focus:ring-0">
-              <SelectValue placeholder={loadingContractors ? "Loading contractors..." : "Select contractor..."} />
+              <SelectValue placeholder="Select contractor..." />
             </SelectTrigger>
             <SelectContent>
               {contractors.map((contractor) => (
                 <SelectItem key={contractor.walletAddress} value={contractor.walletAddress} disabled={!contractor.available} className="text-[13px]">
-                  <span className="font-mono">{contractor.walletAddress.slice(0, 10)}...{contractor.walletAddress.slice(-6)}</span>
+                  <span className="font-medium">{contractorLabel(contractor)}</span>
+                  <span className="ml-2 font-mono text-neutral-400 text-[11px]">{shortAddr(contractor.walletAddress)}</span>
                   <span className="ml-2 text-neutral-500">{contractor.available ? "Available" : `${contractor.activeAssignments} active`}</span>
                 </SelectItem>
               ))}
@@ -1004,7 +1015,7 @@ function ProjectTenderBrief({ project }: { project: Project }) {
   );
 }
 
-function PaymentsPanel({ projects, officialAddress }: { projects: Project[]; officialAddress: string }) {
+function PaymentsPanel({ projects, officialAddress, contractors }: { projects: Project[]; officialAddress: string; contractors: ContractorOption[] }) {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const activeProjects = projects.filter((p) => p.status === "ACTIVE" || p.status === "PAUSED");
 
@@ -1025,12 +1036,12 @@ function PaymentsPanel({ projects, officialAddress }: { projects: Project[]; off
           ))}
         </SelectContent>
       </Select>
-      {selectedProjectId && <MilestonePayments projectId={selectedProjectId} projects={projects} officialAddress={officialAddress} />}
+      {selectedProjectId && <MilestonePayments projectId={selectedProjectId} projects={projects} officialAddress={officialAddress} contractors={contractors} />}
     </div>
   );
 }
 
-function MilestonePayments({ projectId, projects, officialAddress }: { projectId: string; projects: Project[]; officialAddress: string }) {
+function MilestonePayments({ projectId, projects, officialAddress, contractors }: { projectId: string; projects: Project[]; officialAddress: string; contractors: ContractorOption[] }) {
   const { data: milestones, isLoading } = useListMilestones(projectId, {
     query: { queryKey: getListMilestonesQueryKey(projectId) },
   });
@@ -1124,7 +1135,14 @@ function MilestonePayments({ projectId, projects, officialAddress }: { projectId
               <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 space-y-2">
                 <div className="text-[11px] uppercase tracking-[0.1em] text-neutral-500">Submitted proof</div>
                 <div className="text-[12.5px] text-neutral-700">CID: <span className="font-mono">{m.ipfsProofCID}</span></div>
-                <div className="text-[12.5px] text-neutral-700">Submitted by: <span className="font-mono">{m.submittedBy}</span></div>
+                <div className="text-[12.5px] text-neutral-700">Submitted by:{" "}
+                  {(() => {
+                    const c = contractors.find(x => x.walletAddress.toLowerCase() === m.submittedBy?.toLowerCase());
+                    return c?.name
+                      ? <><span className="font-medium">{c.name}</span> <span className="font-mono text-neutral-400 text-[11px]">({shortAddr(m.submittedBy!)})</span></>
+                      : <span className="font-mono">{m.submittedBy ? shortAddr(m.submittedBy) : "—"}</span>;
+                  })()}
+                </div>
                 <div className="text-[12.5px] text-neutral-700">Submitted at: {new Date(m.submittedAt!).toLocaleString()}</div>
                 {(typeof m.proofLatitude === "number" && typeof m.proofLongitude === "number") && (
                   <div className="text-[12.5px] text-neutral-700">Location: {m.proofLatitude.toFixed(4)}, {m.proofLongitude.toFixed(4)}</div>

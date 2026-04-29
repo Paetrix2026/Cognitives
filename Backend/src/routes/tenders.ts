@@ -84,6 +84,7 @@ router.get("/contractors", (_req, res) => {
     .filter((user) => user.role === "CONTRACTOR")
     .map((user) => ({
       walletAddress: user.walletAddress,
+      name: user.googleName ?? null,
       activeAssignments: activeAssignmentCount(user.walletAddress),
       available: activeAssignmentCount(user.walletAddress) === 0,
     }))

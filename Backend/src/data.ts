@@ -15,6 +15,10 @@ export interface UserRecord {
   walletAddress: string;
   role: Role;
   nonce?: string;
+  privyDid?: string;
+  googleEmail?: string;
+  googleName?: string;
+  googleAvatarUrl?: string;
 }
 
 export interface ProjectRecord {
@@ -123,9 +127,9 @@ const seedActivities: ActivityEventRecord[] = [];
 const seedReports: ProjectReportRecord[] = [];
 
 const seedUsers: UserRecord[] = [
-  { walletAddress: "0x437a62ee161a037cc7DEc3D70785C01f7Dc0758b", role: "GOVT_OFFICIAL" },
-  { walletAddress: "0xF32a19dBDc4B0378F2dc1265133f60419546CfB5", role: "AUDITOR" },
-  { walletAddress: "0xAe8511b9733D783CD623a792dc4867053EE60A6a", role: "CONTRACTOR" },
+  { walletAddress: "0x437a62ee161a037cc7DEc3D70785C01f7Dc0758b", role: "GOVT_OFFICIAL", googleName: "Govt Official", googleEmail: "official@demo.gov" },
+  { walletAddress: "0xF32a19dBDc4B0378F2dc1265133f60419546CfB5", role: "AUDITOR", googleName: "Lead Auditor", googleEmail: "auditor@demo.gov" },
+  { walletAddress: "0xAe8511b9733D783CD623a792dc4867053EE60A6a", role: "CONTRACTOR", googleName: "Demo Contractor", googleEmail: "contractor@demo.com" },
 ];
 
 export const users = new Map<string, UserRecord>(
@@ -253,9 +257,17 @@ async function bootstrapTables() {
     CREATE TABLE IF NOT EXISTS dt_users (
       wallet_address TEXT PRIMARY KEY,
       role TEXT NOT NULL,
-      nonce TEXT
+      nonce TEXT,
+      privy_did TEXT,
+      google_email TEXT,
+      google_name TEXT,
+      google_avatar_url TEXT
     );
   `);
+  await query(`ALTER TABLE dt_users ADD COLUMN IF NOT EXISTS privy_did TEXT`);
+  await query(`ALTER TABLE dt_users ADD COLUMN IF NOT EXISTS google_email TEXT`);
+  await query(`ALTER TABLE dt_users ADD COLUMN IF NOT EXISTS google_name TEXT`);
+  await query(`ALTER TABLE dt_users ADD COLUMN IF NOT EXISTS google_avatar_url TEXT`);
   await query(`
     CREATE TABLE IF NOT EXISTS dt_projects (
       id TEXT PRIMARY KEY,
@@ -399,6 +411,10 @@ async function loadFromDatabase() {
       walletAddress,
       role: String(row.role) as Role,
       nonce: row.nonce ? String(row.nonce) : undefined,
+      privyDid: row.privy_did ? String(row.privy_did) : undefined,
+      googleEmail: row.google_email ? String(row.google_email) : undefined,
+      googleName: row.google_name ? String(row.google_name) : undefined,
+      googleAvatarUrl: row.google_avatar_url ? String(row.google_avatar_url) : undefined,
     });
   }
 }
@@ -423,17 +439,43 @@ export async function initializeDataStore() {
 }
 
 export async function persistUser(user: UserRecord) {
-  users.set(user.walletAddress.toLowerCase(), user);
+  const key = user.walletAddress.toLowerCase();
+  const existing = users.get(key);
+  const nextUser = {
+    ...existing,
+    ...user,
+    privyDid: user.privyDid ?? existing?.privyDid,
+    googleEmail: user.googleEmail ?? existing?.googleEmail,
+    googleName: user.googleName ?? existing?.googleName,
+    googleAvatarUrl: user.googleAvatarUrl ?? existing?.googleAvatarUrl,
+  };
+  users.set(key, nextUser);
   if (!pool) return;
 
   await query(
     `
-      INSERT INTO dt_users (wallet_address, role, nonce)
-      VALUES ($1, $2, $3)
+      INSERT INTO dt_users (
+        wallet_address, role, nonce, privy_did, google_email, google_name, google_avatar_url
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (wallet_address)
-      DO UPDATE SET role = EXCLUDED.role, nonce = EXCLUDED.nonce
+      DO UPDATE SET
+        role = EXCLUDED.role,
+        nonce = EXCLUDED.nonce,
+        privy_did = COALESCE(EXCLUDED.privy_did, dt_users.privy_did),
+        google_email = COALESCE(EXCLUDED.google_email, dt_users.google_email),
+        google_name = COALESCE(EXCLUDED.google_name, dt_users.google_name),
+        google_avatar_url = COALESCE(EXCLUDED.google_avatar_url, dt_users.google_avatar_url)
     `,
-    [user.walletAddress, user.role, user.nonce ?? null],
+    [
+      nextUser.walletAddress,
+      nextUser.role,
+      nextUser.nonce ?? null,
+      nextUser.privyDid ?? null,
+      nextUser.googleEmail ?? null,
+      nextUser.googleName ?? null,
+      nextUser.googleAvatarUrl ?? null,
+    ],
   );
 }
 

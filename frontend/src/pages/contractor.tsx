@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import type { Project, Tender } from "@workspace/api-client-react";
-import { formatWalletAddress, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import {
   useListProjects,
   useListMilestones,
@@ -22,7 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { UploadCloud, FileText, Mail, WalletCards, UserRound } from "lucide-react";
+import { UploadCloud, FileText } from "lucide-react";
 
 type Tab = "proofs" | "tenders" | "ongoing";
 
@@ -33,9 +33,6 @@ export default function Contractor() {
   const ongoingProjects = myProjects.filter((p) => p.status === "ACTIVE" || p.status === "PAUSED");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("proofs");
-  const contractorName = user?.profile?.name || "Wallet contractor";
-  const contractorEmail = user?.profile?.email || "No email shared by this login method";
-  const contractorProvider = user?.profile?.loginProvider || "wallet";
 
   if (!user || (user.role !== "CONTRACTOR" && user.role !== "ADMIN")) {
     return <div className="py-20 text-center text-[13px] text-red-600">Unauthorized. Contractor role required.</div>;
@@ -45,41 +42,12 @@ export default function Contractor() {
     <div className="space-y-14">
       <header>
         <div className="text-[11px] uppercase tracking-[0.12em] text-neutral-500 mb-3">Contractor</div>
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <div>
-            <h1 className="text-[34px] md:text-[40px] font-semibold tracking-tight leading-[1.05] text-neutral-900">
-              {contractorName}
-            </h1>
-            <p className="mt-3 text-[14px] text-neutral-600 leading-relaxed max-w-xl">
-              Submit cryptographic proofs against milestones or claim open government broadcasts.
-            </p>
-          </div>
-          <div className="border-y md:border border-neutral-200 md:rounded-lg py-4 md:px-5 min-w-[280px]">
-            <div className="flex items-center gap-3">
-              {user.profile?.profileImage ? (
-                <img src={user.profile.profileImage} alt="" className="h-10 w-10 rounded-full object-cover border border-neutral-200" />
-              ) : (
-                <div className="h-10 w-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500">
-                  <UserRound className="h-4 w-4" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="text-[14px] font-medium text-neutral-900 truncate">{contractorName}</div>
-                <div className="text-[11px] text-neutral-500 capitalize">{contractorProvider}</div>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center gap-2 text-[12px] text-neutral-600 min-w-0">
-                <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-                <span className="truncate">{contractorEmail}</span>
-              </div>
-              <div className="flex items-center gap-2 text-[12px] text-neutral-600 min-w-0">
-                <WalletCards className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-                <span className="font-mono truncate" title={user.walletAddress}>{formatWalletAddress(user.walletAddress)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <h1 className="text-[34px] md:text-[40px] font-semibold tracking-tight leading-[1.05] text-neutral-900">
+          Contractor portal
+        </h1>
+        <p className="mt-3 text-[14px] text-neutral-600 leading-relaxed max-w-xl">
+          Submit cryptographic proofs against milestones or claim open government broadcasts.
+        </p>
       </header>
 
       <div className="flex items-center gap-7 border-b border-neutral-200">

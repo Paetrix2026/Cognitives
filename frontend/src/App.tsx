@@ -1,6 +1,7 @@
 import React from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PrivyProvider } from "@privy-io/react-auth";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
@@ -19,6 +20,7 @@ import ProjectDetail from "./pages/project-detail";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
+const privyAppId = import.meta.env.VITE_PRIVY_APP_ID;
 
 function Router() {
   return (
@@ -59,7 +61,7 @@ function RealtimeBridge() {
 }
 
 function App() {
-  return (
+  const app = (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
@@ -71,6 +73,28 @@ function App() {
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
+  );
+
+  if (!privyAppId) return app;
+
+  return (
+    <PrivyProvider
+      appId={privyAppId}
+      config={{
+        appearance: {
+          landingHeader: "DecentraliTrack",
+          loginMessage: "Verify your assigned wallet before linking Google.",
+        },
+        loginMethods: ["wallet", "google"],
+        embeddedWallets: {
+          ethereum: {
+            createOnLogin: "off",
+          },
+        },
+      }}
+    >
+      {app}
+    </PrivyProvider>
   );
 }
 

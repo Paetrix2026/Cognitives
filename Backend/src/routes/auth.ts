@@ -63,6 +63,10 @@ function makeToken(walletAddress: string, role: string): string {
   return `dt.${payload}.${sig}`;
 }
 
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export function verifyToken(token: string): { walletAddress: string; role: Role } | null {
   try {
     const parts = token.split(".");
@@ -123,6 +127,53 @@ router.post("/auth/verify", async (req, res) => {
   const token = makeToken(walletAddress, role);
   await persistUser({ walletAddress, role, nonce: undefined });
   res.json({ token, user: resolvedUser });
+});
+
+router.post("/auth/privy-profile", async (req, res) => {
+  const authHeader = req.headers.authorization ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const caller = verifyToken(token);
+  if (!caller) {
+    res.status(401).json({ message: "Authentication required" });
+    return;
+  }
+
+  const walletAddress = String(req.body?.walletAddress ?? "").trim();
+  if (!walletAddress || walletAddress.toLowerCase() !== caller.walletAddress.toLowerCase()) {
+    res.status(403).json({ message: "Privy profile wallet must match the verified session wallet" });
+    return;
+  }
+
+  const existing = users.get(walletAddress.toLowerCase());
+  const googleEmail = optionalString(req.body?.googleEmail);
+  const googleName = optionalString(req.body?.googleName);
+  if (!googleEmail || !googleName) {
+    res.status(400).json({ message: "Google name and email are required" });
+    return;
+  }
+
+  await persistUser({
+    walletAddress,
+    role: caller.role,
+    nonce: existing?.nonce,
+    privyDid: optionalString(req.body?.privyDid),
+    googleEmail,
+    googleName,
+    googleAvatarUrl: optionalString(req.body?.googleAvatarUrl),
+  });
+
+  res.json({
+    user: {
+      walletAddress,
+      role: caller.role,
+      profile: {
+        privyDid: optionalString(req.body?.privyDid),
+        email: googleEmail,
+        name: googleName,
+        avatarUrl: optionalString(req.body?.googleAvatarUrl),
+      },
+    },
+  });
 });
 
 router.post("/auth/admin/grant-role", async (req, res) => {

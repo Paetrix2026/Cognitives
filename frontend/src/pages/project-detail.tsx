@@ -16,7 +16,7 @@ import {
   getListPendingMilestonesQueryKey,
 } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/status-badge";
-import { MapPin, Calendar, ShieldCheck, ArrowUpRight, Lock, AlertTriangle, Check, X, Flag } from "lucide-react";
+import { MapPin, Calendar, ShieldCheck, ArrowUpRight, Lock, AlertTriangle, Check, X, Flag, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,6 +64,12 @@ export default function ProjectDetail({ id }: { id?: string }) {
   const progressPercentage = project.totalBudget > 0 ? (project.spentAmount / project.totalBudget) * 100 : 0;
   const isAuditor = user?.role === "AUDITOR" || user?.role === "ADMIN";
   const isCitizen = !!user; // any signed-in role can file a concern
+  
+  const backPath = user ? (
+    user.role === "GOVT_OFFICIAL" || user.role === "ADMIN" 
+      ? "/official" 
+      : `/${user.role.toLowerCase()}`
+  ) : "/citizen";
 
   const invalidateProject = () => {
     queryClient.invalidateQueries({ queryKey: getListMilestonesQueryKey(projectId!) });
@@ -144,10 +150,11 @@ export default function ProjectDetail({ id }: { id?: string }) {
       {/* Header */}
       <div className="space-y-4">
         <Link
-          href="/citizen"
-          className="text-[12px] text-neutral-500 hover:text-neutral-900 inline-flex items-center transition-colors"
+          href={backPath}
+          className="group inline-flex items-center gap-2 px-3 py-1.5 -ml-3 rounded-lg text-[13px] font-medium text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-all"
         >
-          ← Back to directory
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          Back to directory
         </Link>
         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
           <div className="space-y-3 min-w-0">

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
-import { useAuth } from "@/lib/auth";
+import { useAuth, hasMetaMask } from "@/lib/auth";
 import type { UserRole } from "@workspace/api-zod";
-import { ShieldCheck, ChevronDown, ArrowRight, AlertTriangle } from "lucide-react";
+import { useLoginWithSiwe, usePrivy } from "@privy-io/react-auth";
+import { ShieldCheck, ChevronDown, ArrowRight, AlertTriangle, ExternalLink, Check } from "lucide-react";
+import { BrowserProvider } from "ethers";
 
-type LoginState = "idle" | "connecting" | "signing" | "done" | "error";
+type LoginState = "idle" | "connecting" | "signing" | "saving" | "done" | "error";
 
 const ROLE_REDIRECT: Record<string, string> = {
   GOVT_OFFICIAL: "/official",
@@ -37,42 +39,153 @@ const MetaMaskLogo = () => (
   </svg>
 );
 
-const STATE_MESSAGES: Record<LoginState, string> = {
-  idle: "Continue with Web3Auth",
-  connecting: "Connecting to wallet…",
-  signing: "Sign the verification message…",
-  done: "Authenticated!",
-  error: "Connection failed",
-};
+const PRIVY_CONFIGURED = Boolean(import.meta.env.VITE_PRIVY_APP_ID);
 
-const WEB3AUTH_CONFIGURED =
-  !!import.meta.env.VITE_WEB3AUTH_CLIENT_ID &&
-  import.meta.env.VITE_WEB3AUTH_CLIENT_ID !== "YOUR_WEB3AUTH_CLIENT_ID";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(v: string) {
+  return EMAIL_RE.test(v);
+}
 
 export default function Login() {
-  const { login, user, isLoading } = useAuth();
+  if (PRIVY_CONFIGURED) {
+    return <PrivyLogin />;
+  }
+  return <LoginContent />;
+}
+
+function PrivyLogin() {
+  const { syncPrivyProfile, user: authUser } = useAuth();
+  const { ready, user: privyUser, authenticated, logout: logoutPrivy } = usePrivy();
+  const { generateSiweMessage, loginWithSiwe } = useLoginWithSiwe();
+  const [, setLocation] = useLocation();
+  const [pendingWallet, setPendingWallet] = useState("");
+
+  const handleManualDetails = async ({ name, email }: { name: string; email: string }) => {
+    const walletAddress = pendingWallet || privyUser?.wallet?.address || authUser?.walletAddress;
+    if (!walletAddress) throw new Error("Wallet verification is required before saving personal details");
+
+    const storedUser = await syncPrivyProfile({
+      walletAddress,
+      privyDid: privyUser?.id,
+      googleEmail: email,
+      googleName: name,
+    });
+
+    localStorage.setItem("dt_name", name);
+    localStorage.setItem("dt_email", email);
+    setLocation(ROLE_REDIRECT[storedUser.role] ?? "/citizen");
+  };
+
+  const afterWalletVerified = async (walletAddress: string) => {
+    if (!ready) throw new Error("Privy is still initializing");
+
+    const ethereum = (window as Window & { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+    if (!ethereum) throw new Error("MetaMask not installed");
+
+    const chainIdHex = await ethereum.request({ method: "eth_chainId" });
+    const chainId = typeof chainIdHex === "string" ? Number.parseInt(chainIdHex, 16) : 1;
+    const message = await generateSiweMessage({
+      address: walletAddress,
+      chainId: `eip155:${Number.isFinite(chainId) ? chainId : 1}`,
+    });
+    const provider = new BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+    const signature = await signer.signMessage(message);
+    const nextPrivyUser = await loginWithSiwe({ signature, message });
+    if (nextPrivyUser.wallet?.address?.toLowerCase() !== walletAddress.toLowerCase()) {
+      throw new Error("Privy wallet does not match the verified MetaMask address");
+    }
+  };
+
+  return (
+    <LoginContent
+      privyReady={ready}
+      onWalletVerified={async (walletAddress) => {
+        if (authenticated && privyUser?.wallet?.address?.toLowerCase() !== walletAddress.toLowerCase()) {
+          await logoutPrivy();
+        }
+        setPendingWallet(walletAddress);
+        await afterWalletVerified(walletAddress);
+      }}
+      onSaveProfile={handleManualDetails}
+    />
+  );
+}
+
+function LoginContent({
+  privyReady = true,
+  onWalletVerified,
+  onSaveProfile,
+}: {
+  privyReady?: boolean;
+  onWalletVerified?: (walletAddress: string) => Promise<void>;
+  onSaveProfile?: (details: { name: string; email: string }) => Promise<void>;
+}) {
+  const { login, user, isLoading, syncPrivyProfile } = useAuth();
   const [, setLocation] = useLocation();
   const [state, setState] = useState<LoginState>("idle");
   const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [devOpen, setDevOpen] = useState(false);
+  const [metaMaskAvailable, setMetaMaskAvailable] = useState(false);
 
-  // Already logged in — redirect
+  useEffect(() => {
+    setMetaMaskAvailable(hasMetaMask());
+  }, []);
+
+  // Pre-fill from last known profile (survives logout)
+  useEffect(() => {
+    const savedName = localStorage.getItem("dt_name") ?? "";
+    const savedEmail = localStorage.getItem("dt_email") ?? "";
+    if (savedName) setName(savedName);
+    if (savedEmail) setEmail(savedEmail);
+  }, []);
+
+  // Redirect if already logged in
   useEffect(() => {
     if (!isLoading && user) {
       setLocation(ROLE_REDIRECT[user.role] ?? "/citizen");
     }
   }, [user, isLoading, setLocation]);
 
-  const handleWeb3AuthLogin = async () => {
+  const detailsReady = name.trim().length > 0 && isValidEmail(email.trim());
+
+  const handleMetaMaskLogin = async () => {
+    if (!detailsReady) return;
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+
     setError("");
     setState("connecting");
     try {
       setState("signing");
       const resolvedUser = await login();
+
+      setState("saving");
+
+      if (onWalletVerified && onSaveProfile) {
+        // Privy flow: SIWE verify then save profile
+        await onWalletVerified(resolvedUser.walletAddress);
+        await onSaveProfile({ name: trimmedName, email: trimmedEmail });
+        return;
+      }
+
+      // Non-Privy flow: save profile directly with fresh token
+      await syncPrivyProfile({
+        walletAddress: resolvedUser.walletAddress,
+        googleName: trimmedName,
+        googleEmail: trimmedEmail,
+      });
+
+      localStorage.setItem("dt_name", trimmedName);
+      localStorage.setItem("dt_email", trimmedEmail);
+
       setState("done");
       setTimeout(() => {
         setLocation(ROLE_REDIRECT[resolvedUser.role] ?? "/citizen");
-      }, 800);
+      }, 700);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg.includes("rejected") || msg.includes("denied") ? "You rejected the signature request." : msg);
@@ -97,7 +210,35 @@ export default function Login() {
 
   if (isLoading) return null;
 
-  const busy = state === "connecting" || state === "signing";
+  const busy = state === "connecting" || state === "signing" || state === "saving";
+  const done = state === "done";
+  const metaMaskDisabled = busy || done || !privyReady || !detailsReady;
+
+  const buttonLabel = done
+    ? "Authenticated!"
+    : state === "saving"
+    ? "Saving your details…"
+    : state === "signing"
+    ? "Sign the message in MetaMask…"
+    : state === "connecting"
+    ? "Connecting to wallet…"
+    : detailsReady
+    ? "Connect with MetaMask"
+    : "Enter your name and email first";
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    height: "44px",
+    border: "1px solid #d1d5db",
+    borderRadius: "10px",
+    padding: "0 14px",
+    fontSize: "13.5px",
+    color: "#0C0F1D",
+    outline: "none",
+    background: "#fff",
+    boxSizing: "border-box",
+    transition: "border-color 0.15s",
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#F5F4F1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -115,23 +256,54 @@ export default function Login() {
       {/* Main card */}
       <div style={{ background: "#fff", borderRadius: "20px", border: "1px solid rgba(12,15,29,0.08)", padding: "40px", width: "100%", maxWidth: "420px", boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
 
-        <div style={{ textAlign: "center", marginBottom: "32px" }}>
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#EEF2FF", borderRadius: "999px", padding: "5px 12px", fontSize: "11.5px", color: "#1649FF", fontWeight: 600, marginBottom: "16px" }}>
             <ShieldCheck size={13} /> Wallet-verified access
           </div>
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#0C0F1D", letterSpacing: "-0.02em", marginBottom: "8px" }}>
-            Sign in to your workspace
+            Sign in
           </h1>
           <p style={{ fontSize: "13px", color: "#6b7280", lineHeight: 1.6 }}>
-            Continue with Google or MetaMask. Your verified profile and wallet are read automatically.
+            Enter your details, then connect your wallet to continue.
           </p>
         </div>
 
-        {/* Web3Auth button */}
-        {WEB3AUTH_CONFIGURED ? (
+        {/* Name + email fields */}
+        <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
+          <div style={{ position: "relative" }}>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name"
+              autoComplete="name"
+              disabled={busy || done}
+              style={{ ...inputStyle, borderColor: name.trim() ? "#a5b4fc" : "#d1d5db", paddingRight: name.trim() ? "36px" : "14px" }}
+            />
+            {name.trim() && (
+              <Check size={14} color="#6366f1" style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email address"
+              type="email"
+              autoComplete="email"
+              disabled={busy || done}
+              style={{ ...inputStyle, borderColor: isValidEmail(email.trim()) ? "#a5b4fc" : "#d1d5db", paddingRight: isValidEmail(email.trim()) ? "36px" : "14px" }}
+            />
+            {isValidEmail(email.trim()) && (
+              <Check size={14} color="#6366f1" style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+            )}
+          </div>
+        </div>
+
+        {/* MetaMask button */}
+        {metaMaskAvailable ? (
           <button
-            onClick={handleWeb3AuthLogin}
-            disabled={busy || state === "done"}
+            onClick={handleMetaMaskLogin}
+            disabled={metaMaskDisabled}
             style={{
               width: "100%",
               display: "flex",
@@ -139,45 +311,62 @@ export default function Login() {
               justifyContent: "center",
               gap: "12px",
               padding: "14px 20px",
-              background: state === "done" ? "#12A368" : state === "error" ? "#fff" : "#0C0F1D",
-              color: state === "done" ? "#fff" : state === "error" ? "#0C0F1D" : "#fff",
-              border: state === "error" ? "1.5px solid #e5e7eb" : "none",
+              background: done ? "#12A368" : !detailsReady ? "#f3f4f6" : busy ? "#1a1f36" : state === "error" ? "#fff" : "#0C0F1D",
+              color: done ? "#fff" : !detailsReady ? "#9ca3af" : state === "error" ? "#0C0F1D" : "#fff",
+              border: state === "error" ? "1.5px solid #e5e7eb" : !detailsReady ? "1.5px dashed #e5e7eb" : "none",
               borderRadius: "12px",
               fontSize: "14px",
               fontWeight: 600,
-              cursor: busy || state === "done" ? "default" : "pointer",
-              opacity: busy ? 0.75 : 1,
+              cursor: metaMaskDisabled ? "default" : "pointer",
+              opacity: (busy && detailsReady) || !privyReady ? 0.85 : 1,
               transition: "all 0.2s",
             }}
           >
-            {state === "done" ? (
-              <>✓ {STATE_MESSAGES.done}</>
+            {done ? (
+              <>✓ {buttonLabel}</>
             ) : busy ? (
-              <><Spinner /> {STATE_MESSAGES[state]}</>
+              <><Spinner /> {buttonLabel}</>
             ) : (
-              <><ShieldCheck size={18} /> {state === "error" ? "Try again" : STATE_MESSAGES.idle}</>
+              <>
+                {detailsReady && <MetaMaskLogo />}
+                {state === "error" ? "Try again" : buttonLabel}
+              </>
             )}
           </button>
         ) : (
-          <div style={{ width: "100%", padding: "14px 20px", background: "#f3f4f6", borderRadius: "12px", fontSize: "13px", color: "#6b7280", textAlign: "center", border: "1.5px dashed #d1d5db" }}>
-            <ShieldCheck size={16} style={{ display: "inline", marginRight: "8px", verticalAlign: "middle" }} />
-            Social login unavailable — <code style={{ fontSize: "11px", background: "#e5e7eb", padding: "1px 5px", borderRadius: "4px" }}>VITE_WEB3AUTH_CLIENT_ID</code> not set
+          <div style={{ textAlign: "center", padding: "20px", background: "#fafafa", borderRadius: "12px", border: "1px dashed #e5e7eb" }}>
+            <div style={{ fontSize: "28px", marginBottom: "8px" }}>🦊</div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "#0C0F1D", marginBottom: "4px" }}>MetaMask not detected</div>
+            <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "12px" }}>Install the MetaMask browser extension to use wallet auth.</div>
+            <a
+              href="https://metamask.io/download"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", color: "#1649FF", fontWeight: 600, textDecoration: "none" }}
+            >
+              Install MetaMask <ExternalLink size={12} />
+            </a>
           </div>
         )}
 
+        {/* Hints */}
+        {state === "signing" && (
+          <p style={{ marginTop: "10px", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
+            Check the MetaMask popup — approve the signature request to continue.
+          </p>
+        )}
+        {state === "saving" && (
+          <p style={{ marginTop: "10px", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
+            Wallet verified. Saving your profile…
+          </p>
+        )}
+
         {/* Error */}
-        {state === "error" && error && (
+        {error && state === "error" && (
           <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginTop: "12px", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px" }}>
             <AlertTriangle size={14} color="#dc2626" style={{ marginTop: "1px", flexShrink: 0 }} />
             <span style={{ fontSize: "12.5px", color: "#dc2626", lineHeight: 1.5 }}>{error}</span>
           </div>
-        )}
-
-        {/* Signing hint */}
-        {state === "signing" && (
-          <p style={{ marginTop: "12px", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>
-            Approve the wallet signature request to complete verification.
-          </p>
         )}
 
         {/* Divider */}
@@ -215,7 +404,7 @@ export default function Login() {
               <button
                 key={a.wallet}
                 onClick={() => handleDemoLogin(a.role, a.wallet)}
-                disabled={busy || state === "done"}
+                disabled={busy || done}
                 style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "10px 12px", border: "1.5px solid #e5e7eb", borderRadius: "10px", background: "#fff", cursor: "pointer", textAlign: "left", transition: "border-color 0.15s", width: "100%" }}
               >
                 <div style={{ flex: 1 }}>
@@ -231,7 +420,7 @@ export default function Login() {
       </div>
 
       <p style={{ marginTop: "24px", fontSize: "11.5px", color: "#9ca3af", textAlign: "center" }}>
-        New wallet or social login? You'll be registered as <strong style={{ color: "#6b7280" }}>Citizen</strong> by default.
+        New wallet? You'll be registered as <strong style={{ color: "#6b7280" }}>Citizen</strong> by default.
         <br />Role upgrades are granted by an administrator.
       </p>
     </div>
