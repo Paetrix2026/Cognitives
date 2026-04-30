@@ -14,7 +14,38 @@ if (Number.isNaN(port) || port <= 0) {
 
 const basePath = process.env.BASE_PATH ?? "/";
 
-const apiProxyTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:3001";
+async function isApiServer(target: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 250);
+
+  try {
+    const response = await fetch(`${target}/api/healthz`, {
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function resolveApiProxyTarget(): Promise<string> {
+  if (process.env.API_PROXY_TARGET) {
+    return process.env.API_PROXY_TARGET;
+  }
+
+  for (let candidatePort = 3001; candidatePort <= 3010; candidatePort += 1) {
+    const candidate = `http://127.0.0.1:${candidatePort}`;
+    if (await isApiServer(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "http://127.0.0.1:3001";
+}
+
+const apiProxyTarget = await resolveApiProxyTarget();
 
 export default defineConfig({
   base: basePath,
