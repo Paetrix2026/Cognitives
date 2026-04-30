@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: decentralitrack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/decentralitrack
+      SESSION_SECRET: change-me-in-production
+      # Add your other env vars below:
+      # POLYGON_AMOY_RPC: ...
+      # PINATA_JWT: ...
+      # VITE_* vars must be set at BUILD time, not here
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
