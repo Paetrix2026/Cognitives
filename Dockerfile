@@ -1,5 +1,6 @@
-# ─── Stage 1: Install dependencies ───────────────────────────────────────────
-FROM node:22-slim AS deps
+# Target linux/amd64 explicitly — matches Railway's servers and avoids the
+# pnpm-workspace.yaml overrides that block linux-arm64 native binaries.
+FROM --platform=linux/amd64 node:22-slim AS deps
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
@@ -19,7 +20,7 @@ COPY lib/db/package.json           ./lib/db/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ───────────────────────────────────────────────────────────
-FROM node:22-slim AS builder
+FROM --platform=linux/amd64 node:22-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
@@ -35,7 +36,7 @@ COPY . .
 RUN pnpm run build
 
 # ─── Stage 3: Production runtime ──────────────────────────────────────────────
-FROM node:22-slim AS runner
+FROM --platform=linux/amd64 node:22-slim AS runner
 
 WORKDIR /app
 
