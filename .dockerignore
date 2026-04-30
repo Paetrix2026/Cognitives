@@ -6,6 +6,9 @@ node_modules
 **/dist
 frontend/dist
 
+# TypeScript incremental build cache — forces a clean tsc --build inside Docker
+**/*.tsbuildinfo
+
 # Local environment files (inject via Railway env vars instead)
 .env
 .env.*
