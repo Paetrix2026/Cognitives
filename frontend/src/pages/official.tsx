@@ -1134,7 +1134,7 @@ function MilestonePayments({ projectId, projects, officialAddress, contractors }
             {proofSubmitted && (
               <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 space-y-2">
                 <div className="text-[11px] uppercase tracking-[0.1em] text-neutral-500">Submitted proof</div>
-                <div className="text-[12.5px] text-neutral-700">CID: <span className="font-mono">{m.ipfsProofCID}</span></div>
+                <div className="text-[12.5px] text-neutral-700">Storage: <span className="font-mono">{m.ipfsProofCID?.startsWith("local-") ? "Local DB" : m.ipfsProofCID}</span></div>
                 <div className="text-[12.5px] text-neutral-700">Submitted by:{" "}
                   {(() => {
                     const c = contractors.find(x => x.walletAddress.toLowerCase() === m.submittedBy?.toLowerCase());
@@ -1149,7 +1149,7 @@ function MilestonePayments({ projectId, projects, officialAddress, contractors }
                 )}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <a
-                    href={`https://gateway.pinata.cloud/ipfs/${m.ipfsProofCID}`}
+                    href={`/api/milestones/${m.id}/proof-image`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-[12.5px] font-medium text-neutral-900 underline underline-offset-4"

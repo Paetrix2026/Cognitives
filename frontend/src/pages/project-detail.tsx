@@ -331,12 +331,12 @@ export default function ProjectDetail({ id }: { id?: string }) {
                   {m.ipfsProofCID && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-neutral-500 mb-4">
                       <a
-                        href={`https://gateway.pinata.cloud/ipfs/${m.ipfsProofCID}`}
+                        href={`/api/milestones/${m.id}/proof-image`}
                         target="_blank"
                         rel="noreferrer"
                         className="font-mono inline-flex items-center gap-1 hover:text-neutral-900 transition-colors"
                       >
-                        IPFS {m.ipfsProofCID.substring(0, 12)}… <ArrowUpRight className="h-3 w-3" />
+                        View proof <ArrowUpRight className="h-3 w-3" />
                       </a>
                       {typeof m.proofLatitude === "number" && typeof m.proofLongitude === "number" && (
                         <span className="inline-flex items-center gap-1">
