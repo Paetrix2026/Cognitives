@@ -1,0 +1,34 @@
+# Dependencies (reinstalled inside Docker)
+node_modules
+**/node_modules
+
+# Build outputs (rebuilt inside Docker)
+**/dist
+frontend/dist
+
+# Local environment files (inject via Railway env vars instead)
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Editor / OS
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test / dev tooling
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+
+# Blockchain local dev
+contracts/artifacts
+contracts/cache
+contracts/typechain-types
