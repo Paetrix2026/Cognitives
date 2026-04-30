@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/status-badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { UploadCloud, FileText } from "lucide-react";
 
@@ -505,6 +505,7 @@ function SubmitProofDialog({ milestoneId, projectId, walletAddress }: { mileston
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="text-[17px] font-semibold tracking-tight">Submit verification proof</DialogTitle>
+          <DialogDescription className="text-[13px] text-neutral-500">Upload photo evidence and location data to verify completion of this milestone.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5 pt-3">
           <div className="space-y-2">

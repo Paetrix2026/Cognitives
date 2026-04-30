@@ -200,6 +200,7 @@ function normalizeMilestoneRow(row: Record<string, unknown>): MilestoneRecord {
     approvers: Array.isArray(row.approvers) ? row.approvers.map((value) => String(value)) : [],
     rejectionReason: row.rejection_reason ? String(row.rejection_reason) : undefined,
     createdAt: row.created_at ? String(row.created_at) : undefined,
+    proofImageBase64: row.proof_image_base64 ? String(row.proof_image_base64) : undefined,
   };
 }
 
@@ -312,11 +313,13 @@ async function bootstrapTables() {
       tx_hash TEXT NOT NULL,
       approvers JSONB NOT NULL DEFAULT '[]'::jsonb,
       rejection_reason TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      proof_image_base64 TEXT
     );
   `);
   await query(`ALTER TABLE dt_milestones ADD COLUMN IF NOT EXISTS official_acknowledged_at TEXT`);
   await query(`ALTER TABLE dt_milestones ADD COLUMN IF NOT EXISTS official_acknowledged_by TEXT`);
+  await query(`ALTER TABLE dt_milestones ADD COLUMN IF NOT EXISTS proof_image_base64 TEXT`);
   await query(`
     CREATE TABLE IF NOT EXISTS dt_activities (
       id TEXT PRIMARY KEY,
@@ -547,12 +550,14 @@ export async function persistMilestone(milestone: MilestoneRecord) {
       INSERT INTO dt_milestones (
         id, project_id, title, description, payment_amount, ipfs_proof_cid, proof_latitude,
         proof_longitude, submitted_at, approved_at, submitted_by, official_acknowledged_at,
-        official_acknowledged_by, status, approval_count, tx_hash, approvers, rejection_reason, created_at
+        official_acknowledged_by, status, approval_count, tx_hash, approvers, rejection_reason, created_at,
+        proof_image_base64
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12,
-        $13, $14, $15, $16, $17::jsonb, $18, $19
+        $13, $14, $15, $16, $17::jsonb, $18, $19,
+        $20
       )
       ON CONFLICT (id)
       DO UPDATE SET
@@ -573,7 +578,8 @@ export async function persistMilestone(milestone: MilestoneRecord) {
         tx_hash = EXCLUDED.tx_hash,
         approvers = EXCLUDED.approvers,
         rejection_reason = EXCLUDED.rejection_reason,
-        created_at = EXCLUDED.created_at
+        created_at = EXCLUDED.created_at,
+        proof_image_base64 = EXCLUDED.proof_image_base64
     `,
     [
       milestone.id,
@@ -595,6 +601,7 @@ export async function persistMilestone(milestone: MilestoneRecord) {
       JSON.stringify(milestone.approvers),
       milestone.rejectionReason ?? null,
       milestone.createdAt ?? new Date().toISOString(),
+      milestone.proofImageBase64 ?? null,
     ],
   );
 }
@@ -706,7 +713,7 @@ export function getProjectAnomalies(): AnomalyFlagRecord[] {
 }
 
 export function serializeMilestone(milestone: MilestoneRecord) {
-  const { approvers, createdAt, ...safeMilestone } = milestone;
+  const { approvers, createdAt, proofImageBase64, ...safeMilestone } = milestone;
   return safeMilestone;
 }
 

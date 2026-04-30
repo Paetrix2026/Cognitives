@@ -320,8 +320,10 @@ router.get("/milestones/:id/proof-image", (req, res) => {
     res.send(buffer);
     return;
   }
-  if (milestone.ipfsProofCID && !milestone.ipfsProofCID.startsWith("bafybeidemo")) {
-    res.redirect(302, `https://gateway.pinata.cloud/ipfs/${milestone.ipfsProofCID}`);
+  // Only redirect to IPFS for real CIDs (not local or demo placeholders)
+  const cid = milestone.ipfsProofCID ?? "";
+  if (cid && !cid.startsWith("local-") && !cid.startsWith("bafybeidemo")) {
+    res.redirect(302, `https://gateway.pinata.cloud/ipfs/${cid}`);
     return;
   }
   res.status(404).json({ message: "No proof image available" });
